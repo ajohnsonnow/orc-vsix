@@ -1,0 +1,27 @@
+# ── Source & Test (not needed in packaged VSIX) ───────────────────────────────
+.vscode/**
+.vscode-test/**
+src/**
+
+# ── Config & Tooling (dev-only) ───────────────────────────────────────────────
+.eslintrc.js
+.aiignore
+.editorconfig
+tsconfig.json
+tsconfig.test.json
+vitest.config.ts
+cspell.json
+
+# ── Build artifacts & maps ────────────────────────────────────────────────────
+**/*.map
+out/test/**
+
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/**
+
+# ── Docs (nice to have but not required in extension package) ─────────────────
+CONTRIBUTING.md
+SECURITY.md
+
+# ── Lockfile (not needed in VSIX) ─────────────────────────────────────────────
+package-lock.json

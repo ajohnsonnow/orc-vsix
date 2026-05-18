@@ -1,0 +1,32 @@
+# Orca — AI context filtering
+# Prevents AI tools from loading secrets, build output, and large binaries
+# into context windows. Mirrors .gitignore but optimized for AI assistant scope.
+
+# ── Secrets (highest priority) ─────────────────
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets/
+
+# ── Compiled output (not source of truth) ──────
+out/
+*.js.map
+
+# ── Dependencies (too large, no signal) ────────
+node_modules/
+
+# ── Logs / local state ─────────────────────────
+*.log
+logs/
+
+# ── OS artifacts ───────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor config (not project logic) ──────────
+.vscode/settings.json
+
+# ── VSIX package ───────────────────────────────
+*.vsix

@@ -1,0 +1,189 @@
+{
+  "name": "orc-cognitive-router",
+  "displayName": "ORC — Cognitive Prompt Router",
+  "description": "Routes prompts to the optimal AI model and effort level based on cognitive load analysis. Heavily optimized for Claude Code in VS Code.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai",
+    "prompt-routing",
+    "token-optimization",
+    "anthropic",
+    "orc"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "orc.routePrompt",
+        "title": "ORC: Route & Send Prompt",
+        "icon": "$(symbol-event)"
+      },
+      {
+        "command": "orc.analyzeSelection",
+        "title": "ORC: Analyze Selected Text as Prompt",
+        "icon": "$(search)"
+      },
+      {
+        "command": "orc.applyRecommendation",
+        "title": "ORC: Apply Last Recommendation to Claude Code",
+        "icon": "$(check)"
+      },
+      {
+        "command": "orc.showStatus",
+        "title": "ORC: Show Token & Cost Status",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "orc.clearSession",
+        "title": "ORC: Clear Session Token Count",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "orc.openSettings",
+        "title": "ORC: Open Settings",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "orc.setApiKey",
+        "title": "ORC: Set Anthropic API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "orc.exportDiagnostics",
+        "title": "ORC: Export Problems Panel to JSON (for preflight)",
+        "icon": "$(export)"
+      }
+    ],
+    "configuration": {
+      "title": "ORC Cognitive Router",
+      "properties": {
+        "orc.analyzerMode": {
+          "type": "string",
+          "enum": ["llm", "heuristic", "auto"],
+          "default": "auto",
+          "description": "How to analyze prompt complexity. 'auto' uses LLM if API key is set, otherwise heuristic.",
+          "enumDescriptions": [
+            "Always use Haiku 4.5 LLM to classify prompt complexity (requires API key)",
+            "Always use rule-based heuristics (no API key needed, instant)",
+            "Use LLM if API key configured, otherwise heuristic"
+          ]
+        },
+        "orc.defaultBias": {
+          "type": "string",
+          "enum": ["claude", "balanced", "cost"],
+          "default": "claude",
+          "description": "Routing bias. 'claude' heavily prefers Claude models (optimal for Claude Code in VS Code).",
+          "enumDescriptions": [
+            "Strongly prefer Claude models — optimized for Claude Code in VS Code",
+            "Consider all providers equally",
+            "Always route to cheapest viable option"
+          ]
+        },
+        "orc.showCostWarnings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a warning when estimated token cost exceeds threshold."
+        },
+        "orc.costWarningThresholdUSD": {
+          "type": "number",
+          "default": 0.10,
+          "description": "Show a cost warning when a single prompt is estimated to exceed this amount (USD)."
+        },
+        "orc.autoApplyToClaudeCode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically write the recommended model to Claude Code settings (claude.model) on approval, without a second confirmation."
+        },
+        "orc.statusBarEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show ORC token usage in the VS Code status bar."
+        },
+        "orc.claudeCodeSettingsPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to your Claude Code settings.json. Leave empty to auto-detect (~/.claude/settings.json)."
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "orc.analyzeSelection",
+          "when": "editorHasSelection",
+          "group": "orc@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "orc.routePrompt"
+        },
+        {
+          "command": "orc.analyzeSelection",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "orc.applyRecommendation"
+        },
+        {
+          "command": "orc.showStatus"
+        },
+        {
+          "command": "orc.clearSession"
+        },
+        {
+          "command": "orc.setApiKey"
+        },
+        {
+          "command": "orc.exportDiagnostics"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "orc.routePrompt",
+        "key": "ctrl+shift+o r",
+        "mac": "cmd+shift+o r"
+      },
+      {
+        "command": "orc.analyzeSelection",
+        "key": "ctrl+shift+o a",
+        "mac": "cmd+shift+o a",
+        "when": "editorHasSelection"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.x",
+    "@typescript-eslint/parser": "^7.x",
+    "eslint": "^8.x",
+    "typescript": "^5.x",
+    "vitest": "^4.x"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  }
+}
