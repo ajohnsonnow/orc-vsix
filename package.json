@@ -242,7 +242,7 @@
     "compile": "tsc -p ./ --noEmit && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --sourcemap",
     "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --sourcemap --watch",
     "pretest": "npm run compile",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "pretest:e2e": "npm run compile",

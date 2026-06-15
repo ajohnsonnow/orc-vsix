@@ -98,7 +98,7 @@ export function heuristicQualityCheck(
         score -= 25;
       }
 
-      // TODO/placeholder detection — incomplete implementation
+      // Detect placeholder / unfinished-implementation markers in generated code.
       if (/\/\/\s*(TODO|FIXME|IMPLEMENT|YOUR CODE HERE)/i.test(code)) {
         issues.push('Code contains unimplemented TODOs or placeholders');
         score -= 15;
@@ -211,10 +211,11 @@ export async function llmQualityEvaluation(
       .map(b => (b as { type: 'text'; text: string }).text)
       .join('');
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) { throw new Error('No JSON in evaluator response'); }
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end < start) { throw new Error('No JSON in evaluator response'); }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
+    const parsed = JSON.parse(text.slice(start, end + 1)) as {
       score: number;
       passed: boolean;
       issues: string[];

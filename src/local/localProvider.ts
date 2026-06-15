@@ -18,7 +18,7 @@ export interface LocalServerStatus {
 }
 
 function trimSlash(url: string): string {
-  return url.replace(/\/+$/, '');
+  return url.replace(/\/$/, '');
 }
 
 async function fetchWithTimeout(url: string, timeoutMs: number, init?: RequestInit): Promise<Response> {

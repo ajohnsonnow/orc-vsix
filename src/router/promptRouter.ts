@@ -459,9 +459,9 @@ export function buildRecommendation(
   );
 
   const costWarning = estimatedCostUSD > costWarningThresholdUSD;
+  const thinkingNote = thinkingBudget > 0 ? `${thinkingBudget.toLocaleString()} thinking tokens included.` : '';
   const costWarningMessage = costWarning
-    ? `Estimated cost $${estimatedCostUSD.toFixed(3)} exceeds threshold ($${costWarningThresholdUSD.toFixed(2)}). ` +
-      `${thinkingBudget > 0 ? `${thinkingBudget.toLocaleString()} thinking tokens included.` : ''}`
+    ? `Estimated cost $${estimatedCostUSD.toFixed(3)} exceeds threshold ($${costWarningThresholdUSD.toFixed(2)}). ${thinkingNote}`
     : '';
 
   const estimatedLatencyMs = estimateLatency(analysis.tier, thinkingBudget);

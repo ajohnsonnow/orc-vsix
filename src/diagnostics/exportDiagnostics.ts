@@ -65,10 +65,10 @@ export interface ExportOptions {
 
 const SEVERITY_ORDER: Record<SeverityName, number> = { error: 0, warning: 1, info: 2, hint: 3 };
 
-export async function exportDiagnostics(opts: ExportOptions = {}): Promise<{
+export function exportDiagnostics(opts: ExportOptions = {}): {
   outputPath: string;
   problemCount: number;
-}> {
+} {
   const ws = vscode.workspace.workspaceFolders?.[0];
   if (!ws) {
     throw new Error('No workspace folder is open — cannot export diagnostics.');
@@ -143,9 +143,9 @@ export async function exportDiagnostics(opts: ExportOptions = {}): Promise<{
 
 /** VS Code command entry point. Triggered by `orc.exportDiagnostics` or the
  *  `ORC: Export Problems Panel to JSON` command palette entry. */
-export async function exportDiagnosticsCommand(): Promise<void> {
+export function exportDiagnosticsCommand(): void {
   try {
-    const { outputPath, problemCount } = await exportDiagnostics();
+    const { outputPath, problemCount } = exportDiagnostics();
     const relOut = vscode.workspace.asRelativePath(outputPath);
     vscode.window.showInformationMessage(
       `ORC: exported ${problemCount} problem(s) to ${relOut}`,

@@ -71,6 +71,7 @@ function getClient(apiKey: string): Anthropic {
 //  God Mode Executor
 // ─────────────────────────────────────────────
 
+// eslint-disable-next-line complexity -- linear provider dispatch + quality-cascade orchestration; splitting would add indirection without reducing real branching
 export async function executeRecommendation(
   prompt: string,
   rec: RouteRecommendation,
@@ -208,7 +209,7 @@ export async function executeRecommendation(
 //  Core Streaming Call
 // ─────────────────────────────────────────────
 
-interface StreamResult extends GodModeExecutionResult {}
+type StreamResult = GodModeExecutionResult;
 
 interface StreamState {
   fullText: string;
@@ -513,7 +514,7 @@ async function streamLocalCall(
   const state = { fullText: '', inThinking: false, inputTokens: 0, outputTokens: 0 };
 
   try {
-    const resp = await fetch(`${endpoint.replace(/\/+$/, '')}/v1/chat/completions`, {
+    const resp = await fetch(`${endpoint.replace(/\/$/, '')}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -528,7 +529,7 @@ async function streamLocalCall(
       return buildErrorResult(rec, Date.now() - startMs, msg);
     }
 
-    const reader = resp.body.getReader();
+    const reader = (resp.body as ReadableStream<Uint8Array>).getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let streaming = true;
@@ -580,9 +581,10 @@ async function streamLocalCall(
   } catch (err) {
     clearTimeout(timeoutId);
     const isAbort = err instanceof Error && err.name === 'AbortError';
+    const detail = err instanceof Error ? err.message : String(err);
     const msg = isAbort
       ? `Local request timed out after 120s. "${rec.primaryModel.id}" may be too large or not loaded.`
-      : `Cannot reach LM Studio at ${endpoint}. Start the server and load "${rec.primaryModel.id}". (${err instanceof Error ? err.message : String(err)})`;
+      : `Cannot reach LM Studio at ${endpoint}. Start the server and load "${rec.primaryModel.id}". (${detail})`;
     channel.appendLine(`\n**Error:** ${msg}`);
     return buildErrorResult(rec, Date.now() - startMs, msg);
   }

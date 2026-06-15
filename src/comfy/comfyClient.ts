@@ -40,7 +40,7 @@ export interface GeneratedImage {
 type WorkflowGraph = Record<string, { class_type?: string; inputs?: Record<string, unknown> }>;
 
 function trimSlash(url: string): string {
-  return url.replace(/\/+$/, '');
+  return url.replace(/\/$/, '');
 }
 
 function randomSeed(): number {

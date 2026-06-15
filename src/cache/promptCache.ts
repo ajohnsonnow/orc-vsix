@@ -97,15 +97,13 @@ export function buildCacheAwarePayload(
   // Dynamic user prompt — always last, never cached
   userContentParts.push({ type: 'text', text: userPrompt });
 
+  const singleTextPart = userContentParts.length === 1 && userContentParts[0].type === 'text'
+    ? userContentParts[0].text
+    : null;
+  const userContent = singleTextPart ?? userContentParts;
+
   const messages: Anthropic.Messages.MessageParam[] = [
-    {
-      role: 'user',
-      content: userContentParts.length === 1
-        ? userContentParts[0].type === 'text'
-          ? userContentParts[0].text
-          : userContentParts
-        : userContentParts,
-    },
+    { role: 'user', content: userContent },
   ];
 
   return { system: systemBlocks, messages, hasCacheBreakpoints, cacheableTokens };

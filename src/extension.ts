@@ -118,11 +118,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const installed = context.globalState.get<boolean>('orc.installed');
   if (!installed) {
     void context.globalState.update('orc.installed', true);
-    const keyMsg = _apiKeySource === 'env'
-      ? 'API key detected from ANTHROPIC_API_KEY env var (shared with Claude Code).'
-      : _apiKeySource === 'secret'
-        ? 'API key loaded from SecretStorage.'
-        : 'No API key found. ORC will delegate execution to Claude Code extension.';
+    let keyMsg: string;
+    if (_apiKeySource === 'env') {
+      keyMsg = 'API key detected from ANTHROPIC_API_KEY env var (shared with Claude Code).';
+    } else if (_apiKeySource === 'secret') {
+      keyMsg = 'API key loaded from SecretStorage.';
+    } else {
+      keyMsg = 'No API key found. ORC will delegate execution to Claude Code extension.';
+    }
     void vscode.window.showInformationMessage(
       `ORC Cognitive Router active. ${keyMsg}`,
       'Open Settings',
@@ -181,9 +184,14 @@ async function loadApiKey(context: vscode.ExtensionContext): Promise<string> {
 /** Command: prompts for an API key and stores it in VS Code SecretStorage. */
 async function setApiKeyCommand(context: vscode.ExtensionContext): Promise<void> {
   const current = await context.secrets.get(SECRET_KEY);
-  const sourceHint = _apiKeySource === 'env'
-    ? '(currently using ANTHROPIC_API_KEY env var — this will override it)'
-    : current ? '(key already set — enter new value to replace)' : 'sk-ant-...';
+  let sourceHint: string;
+  if (_apiKeySource === 'env') {
+    sourceHint = '(currently using ANTHROPIC_API_KEY env var — this will override it)';
+  } else if (current) {
+    sourceHint = '(key already set — enter new value to replace)';
+  } else {
+    sourceHint = 'sk-ant-...';
+  }
   const key = await vscode.window.showInputBox({
     title: 'ORC: Set Anthropic API Key',
     prompt: 'Stored in VS Code SecretStorage — never written to settings.json. ' +
@@ -324,6 +332,7 @@ async function runGodModePipeline(
       title: 'ORC: Analyzing...',
       cancellable: false,
     },
+    // eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- sequential God Mode pipeline (count -> analyze -> route -> guard -> compress -> approve -> execute); steps are linear, not deeply branched
     async (progress) => {
 
       // ── Step 1: Precision Token Counting ─────────

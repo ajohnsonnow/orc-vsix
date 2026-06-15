@@ -159,13 +159,14 @@ function buildAnalyzerPrompt(meta: PromptMetadata): string {
 // ─────────────────────────────────────────────
 
 function parseAnalyzerResponse(rawText: string): CognitiveAnalysis {
-  // Extract JSON block (model may wrap it in ```json ... ```)
-  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  // Extract the JSON block (model may wrap it in ```json ... ```).
+  const start = rawText.indexOf('{');
+  const end = rawText.lastIndexOf('}');
+  if (start === -1 || end < start) {
     throw new Error('No JSON object found in LLM analyzer response');
   }
 
-  const parsed = JSON.parse(jsonMatch[0]) as unknown as LLMAnalysisResponse;
+  const parsed = JSON.parse(rawText.slice(start, end + 1)) as unknown as LLMAnalysisResponse;
 
   const score = Math.max(1, Math.min(10, Math.round(parsed.score))) as CognitiveLoadScore;
   const tier = scoreToTier(score);
@@ -177,13 +178,13 @@ function parseAnalyzerResponse(rawText: string): CognitiveAnalysis {
     tier,
     signals: (parsed.signals ?? []).map(s => ({
       type: s.type as CognitiveAnalysis['signals'][number]['type'],
-      label: String(s.label),
-      weight: Number(s.weight),
+      label: s.label,
+      weight: s.weight,
     })),
     effortLevel,
     estimatedThinkingTokens: effortToThinkingBudget(effortLevel),
     analyzerUsed: 'llm',
     confidence,
-    reasoning: String(parsed.reasoning ?? '').slice(0, 200),
+    reasoning: (parsed.reasoning ?? '').slice(0, 200),
   };
 }

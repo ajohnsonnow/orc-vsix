@@ -151,7 +151,7 @@ export async function compressContext(
       estimatedSavingsUSD,
       wasCompressed: true,
     };
-  } catch (err) {
+  } catch {
     // Compression failed — return original (never block the user)
     return {
       compressed: contextText,

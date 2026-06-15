@@ -121,6 +121,7 @@ export function effortToThinkingBudget(effort: EffortLevel): number {
  * Analyzes a prompt using deterministic heuristics.
  * Returns a CognitiveAnalysis with full signal breakdown.
  */
+// eslint-disable-next-line sonarjs/cognitive-complexity -- flat additive scoring; each keyword/length/context check is an independent signal
 export function analyzeHeuristic(meta: PromptMetadata): CognitiveAnalysis {
   const signals: AnalysisSignal[] = [];
   let rawScore = 20; // baseline: everything starts at "medium-low"
