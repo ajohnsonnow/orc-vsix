@@ -209,7 +209,13 @@ async function setApiKeyCommand(context: vscode.ExtensionContext): Promise<void>
 // ─────────────────────────────────────────────
 
 async function routePromptCommand(context: vscode.ExtensionContext): Promise<void> {
-  const prompt = await showPromptInputBox();
+  // Pre-fill from clipboard — lets users copy from Claude Code chat (or anywhere) then Ctrl+Shift+O R
+  const clipboardText = (await vscode.env.clipboard.readText()).trim();
+  const prefill = clipboardText.length >= 3 && clipboardText.length <= MAX_PROMPT_CHARS
+    ? clipboardText
+    : undefined;
+
+  const prompt = await showPromptInputBox(prefill);
   if (!prompt) { return; }
 
   const editor = vscode.window.activeTextEditor;
@@ -512,9 +518,9 @@ async function runGodModePipeline(
 const CLAUDE_CODE_EXT_ID = 'anthropic.claude-code';
 
 /**
- * Sends a prompt to Claude Code via its URI handler.
- * ORC applies the routing decision to ~/.claude/settings.json first,
- * then opens Claude Code so it picks up the model + thinking budget.
+ * Sends a prompt to Claude Code after ORC has applied routing settings.
+ * Copies prompt to clipboard, then focuses Claude Code's input via its
+ * registered command so the user only needs Ctrl+V to send.
  */
 async function sendToClaudeCode(prompt: string): Promise<void> {
   const ext = vscode.extensions.getExtension(CLAUDE_CODE_EXT_ID);
@@ -527,9 +533,19 @@ async function sendToClaudeCode(prompt: string): Promise<void> {
   }
 
   await vscode.env.clipboard.writeText(prompt);
-  void vscode.window.showInformationMessage(
-    'ORC: Prompt copied to clipboard — paste into Claude Code chat (Ctrl+L).',
-  );
+
+  // claude-vscode.focus focuses Claude Code's chat input — user just presses Ctrl+V
+  try {
+    await vscode.commands.executeCommand('claude-vscode.focus');
+    void vscode.window.showInformationMessage(
+      'ORC: Model settings applied. Claude Code is focused — press Ctrl+V to send your prompt.',
+    );
+  } catch {
+    // claude-vscode.focus unavailable in this version — fall back to manual paste
+    void vscode.window.showInformationMessage(
+      'ORC: Model settings applied. Prompt copied — open Claude Code (Ctrl+L) and paste.',
+    );
+  }
 }
 
 // ─────────────────────────────────────────────

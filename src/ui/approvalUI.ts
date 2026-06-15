@@ -320,13 +320,17 @@ function buildMinimalClaudeConfig(model: ModelSpec, thinkingBudget: number) {
 
 /**
  * Shows an InputBox for the user to type a prompt directly.
- * Used by the orca.routePrompt command when no selection is active.
+ * @param prefill Optional text pre-filled from clipboard. Selected on open so typing replaces it.
  */
-export async function showPromptInputBox(): Promise<string | undefined> {
+export async function showPromptInputBox(prefill?: string): Promise<string | undefined> {
   return vscode.window.showInputBox({
     title: 'ORC: Route a Prompt',
     placeHolder: 'Describe what you want Claude to do...',
-    prompt: 'ORC will analyze the complexity and recommend the best model + effort level.',
+    prompt: prefill
+      ? 'Pre-filled from clipboard — edit or press Enter to confirm.'
+      : 'ORC will analyze the complexity and recommend the best model + effort level.',
+    value: prefill,
+    valueSelection: prefill ? [0, prefill.length] : undefined,
     ignoreFocusOut: true,
     validateInput: value => (value.trim().length < 3 ? 'Prompt must be at least 3 characters.' : null),
   });
