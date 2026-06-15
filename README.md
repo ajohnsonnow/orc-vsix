@@ -5,12 +5,12 @@
 ## Features
 
 | Feature | Detail |
-|---|---|
+| --- | --- |
 | **Cognitive load scoring** | Heuristic (<1ms, no key) or Haiku LLM classifier (~$0.001) |
 | **5-tier model routing** | Haiku → Sonnet → Opus based on task complexity score (1–10) |
 | **Claude Code integration** | Writes recommended model + thinking budget to `~/.claude/settings.json` |
 | **Prompt caching** | `cache_control` breakpoints — up to 90% input cost reduction |
-| **Extended thinking** | Streaming extended thinking with budget (1k–32k tokens) |
+| **Extended thinking** | Streaming extended thinking with budget (1k–128k tokens) |
 | **Self-correction cascade** | Auto-escalates if quality check fails (FrugalGPT pattern) |
 | **Context Guard** | Warns on attention dilution, lost-in-middle, context rot |
 | **Context Compression** | Haiku preprocessing for oversized context (65% savings) |
@@ -27,14 +27,14 @@
 ## Keybindings
 
 | Key | Command |
-|---|---|
+| --- | --- |
 | `Ctrl+Shift+O R` | Route & Send Prompt |
 | `Ctrl+Shift+O A` | Analyze Selected Text as Prompt (when selection active) |
 
 ## Commands
 
 | Command | Description |
-|---|---|
+| --- | --- |
 | `ORC: Route & Send Prompt` | Main command — analyze, approve, execute |
 | `ORC: Analyze Selected Text as Prompt` | Use editor selection as prompt or context |
 | `ORC: Apply Last Recommendation to Claude Code` | Re-apply routing to `~/.claude/settings.json` |
@@ -46,7 +46,7 @@
 ## Settings
 
 | Setting | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `orc.analyzerMode` | `"auto"` | `llm` / `heuristic` / `auto` |
 | `orc.defaultBias` | `"claude"` | `claude` / `balanced` / `cost` |
 | `orc.autoApplyToClaudeCode` | `false` | Skip confirm when writing settings.json |
@@ -58,12 +58,12 @@
 ## Routing Tiers
 
 | Score | Tier | Model | Thinking Budget |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1–2 | minimal | Claude Haiku 4.5 | — |
 | 3–4 | low | Claude Haiku 4.5 | 1,024 |
 | 5–6 | medium | Claude Sonnet 4.6 | 4,096 |
-| 7–8 | high | Claude Sonnet 4.6 | 10,000 |
-| 9–10 | extreme | Claude Opus 4.6 | 32,000 |
+| 7–8 | high | Claude Opus 4.8 | 10,000 |
+| 9–10 | extreme | Claude Fable 5 | 32,000–128,000 |
 
 ## Development
 
@@ -71,13 +71,21 @@
 npm install
 npm run compile      # build once
 npm run watch        # incremental watch
-npm run test:unit    # vitest (154 tests)
+npm run test:unit    # vitest (157 tests)
 npm run lint         # eslint — must be zero errors
 npm audit            # zero vulnerabilities required
 # F5 in VS Code → launch Extension Host
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the complete architecture reference.
+
+## Support
+
+ORC is free and open source. If it saves you API costs or speeds up your workflow, a tip is always appreciated:
+
+- Venmo: [@ajnow](https://venmo.com/u/ajnow)
+- Cash App: [$ajnow](https://cash.app/$ajnow)
+- PayPal: [paypal.me/ajohnsonnow](https://paypal.me/ajohnsonnow)
 
 ## License
 
