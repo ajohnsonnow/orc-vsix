@@ -52,9 +52,9 @@ export function buildCacheAwarePayload(
   userPrompt: string,
   estimateTokens: (text: string) => number,
 ): CacheAwarePayload {
-  // Anthropic minimum: 4096 for Haiku/Opus, 2048 for Sonnet/Fable 5.
-  // Use the conservative maximum so we never submit under-threshold blocks.
-  const MIN_CACHEABLE_TOKENS = 4096;
+  // Anthropic minimum: 1024 tokens for Haiku/Sonnet/Opus 4.8; 512 for Fable 5.
+  // We use 1024 here — the correct standard-model floor from Anthropic's docs.
+  const MIN_CACHEABLE_TOKENS = 1024;
 
   const systemTokens = estimateTokens(systemPrompt);
   const contextTokens = estimateTokens(contextDocument);

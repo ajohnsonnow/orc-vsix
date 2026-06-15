@@ -405,7 +405,18 @@ async function streamAnthropicCall(
     };
   } catch (err) {
     clearTimeout(timeoutId);
-    const message = err instanceof Error ? err.message : String(err);
+    let message: string;
+    if (err instanceof Anthropic.RateLimitError) {
+      message = 'Rate limit exceeded. Wait a moment and try again. (HTTP 429)';
+    } else if (err instanceof Anthropic.AuthenticationError) {
+      message = "Invalid API key. Run 'ORC: Set Anthropic API Key' from the Command Palette. (HTTP 401)";
+    } else if (err instanceof Anthropic.APIConnectionError || (err instanceof Error && err.name === 'AbortError')) {
+      message = 'Request timed out or connection lost after 120s. Try a shorter prompt or check your network.';
+    } else if (err instanceof Anthropic.APIError) {
+      message = `Anthropic API error ${err.status}: ${err.message}`;
+    } else {
+      message = err instanceof Error ? err.message : String(err);
+    }
     channel.appendLine(`\n**Error:** ${message}`);
     return buildErrorResult(rec, 0, message);
   }
