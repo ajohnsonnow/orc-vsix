@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "moduleResolution": "Node16"
   },
-  "exclude": ["node_modules", ".vscode-test", "vitest.config.ts", "src/test"]
+  "exclude": ["node_modules", ".vscode-test", "vitest.config.ts", "vitest.coverage.config.ts", "playwright.config.ts", "scripts", "src/test"]
 }

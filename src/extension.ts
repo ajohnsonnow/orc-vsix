@@ -33,7 +33,7 @@ import { buildRecommendation } from './router/promptRouter.js';
 import { showApprovalDialog, showPromptInputBox } from './ui/approvalUI.js';
 import { OrcStatusBar } from './ui/statusBar.js';
 import { confirmAndApply, getClaudeSettingsPath } from './settings/claudeSettings.js';
-import { executeRecommendation } from './executor/modelExecutor.js';
+import { executeRecommendation, disposeOutputChannel } from './executor/modelExecutor.js';
 import { runContextGuard, showContextGuardDiagnostics, checkPeakHourWindow, analyzeTierFit, MAX_CONTEXT_TOKENS } from './diagnostics/contextGuard.js';
 import { countTokensViaAPI, countTokensHeuristic } from './diagnostics/tokenCounter.js';
 import { compressContext, shouldCompress } from './compression/contextCompressor.js';
@@ -62,6 +62,7 @@ let _apiKey = '';
 
 /** Tracks where the active API key came from, for UI messaging. */
 let _apiKeySource: 'env' | 'secret' | 'none' = 'none';
+let _pipelineRunning = false;
 
 // ─────────────────────────────────────────────
 //  Activate
@@ -73,9 +74,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Re-sync _apiKey whenever the secret changes (e.g. user runs orc.setApiKey)
   context.subscriptions.push(
-    context.secrets.onDidChange(e => {
-      if (e.key === 'orc.anthropicApiKey') {
-        void context.secrets.get('orc.anthropicApiKey').then(k => { _apiKey = k ?? ''; });
+    context.secrets.onDidChange(async e => {
+      if (e.key === SECRET_KEY) {
+        const k = await context.secrets.get(SECRET_KEY);
+        _apiKey = k ?? '';
+        _apiKeySource = k ? 'secret' : 'none';
       }
     }),
   );
@@ -192,8 +195,12 @@ async function setApiKeyCommand(context: vscode.ExtensionContext): Promise<void>
     void vscode.window.showInformationMessage('ORC: API key saved securely in SecretStorage.');
   } else {
     await context.secrets.delete(SECRET_KEY);
-    _apiKey = '';
-    void vscode.window.showInformationMessage('ORC: API key cleared.');
+    const envFallback = process.env['ANTHROPIC_API_KEY'] ?? '';
+    _apiKey = envFallback;
+    _apiKeySource = envFallback ? 'env' : 'none';
+    void vscode.window.showInformationMessage(
+      envFallback ? 'ORC: API key cleared — falling back to ANTHROPIC_API_KEY env var.' : 'ORC: API key cleared.',
+    );
   }
 }
 
@@ -271,15 +278,35 @@ async function applyLastRecommendation(): Promise<void> {
 //  God Mode Pipeline
 // ─────────────────────────────────────────────
 
+const MAX_PROMPT_CHARS = 32_000;
+const MAX_CONTEXT_CHARS = 500_000;
+
 async function runGodModePipeline(
   prompt: string,
   contextText: string,
   _context: vscode.ExtensionContext,
 ): Promise<void> {
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    void vscode.window.showErrorMessage(
+      `ORC: Prompt too long (${prompt.length.toLocaleString()} chars, max ${MAX_PROMPT_CHARS.toLocaleString()}).`,
+    );
+    return;
+  }
+  if (contextText.length > MAX_CONTEXT_CHARS) {
+    void vscode.window.showErrorMessage(
+      `ORC: Context too large (${contextText.length.toLocaleString()} chars, max ${MAX_CONTEXT_CHARS.toLocaleString()}).`,
+    );
+    return;
+  }
+  if (_pipelineRunning) {
+    void vscode.window.showWarningMessage('ORC: A pipeline is already running. Please wait.');
+    return;
+  }
   const config = getOrcConfig();
   const settingsPath = getClaudeSettingsPath(config.claudeCodeSettingsPath);
 
-  await vscode.window.withProgress(
+  _pipelineRunning = true;
+  await Promise.resolve(vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       title: 'ORC: Analyzing...',
@@ -386,6 +413,9 @@ async function runGodModePipeline(
         await confirmAndApply(finalRec.claudeCodeCommand, settingsPath, config.autoApplyToClaudeCode);
       }
 
+      // Settings-only: user applied settings without requesting model execution
+      if (approval.outcome === 'settings-only') { return; }
+
       // ── Step 7b: No API key — delegate to Claude Code ──
       if (!config.anthropicApiKey) {
         // Settings already applied in 7a. Launch Claude Code with the prompt.
@@ -429,8 +459,10 @@ async function runGodModePipeline(
         suppressThinkingTrace: false,
       });
       if (finalRec.claudeCodeCommand) {
-        finalRec.claudeCodeCommand.systemPromptPrefix =
-          hardenedPrompt + '\n\n' + (finalRec.claudeCodeCommand.systemPromptPrefix ?? '');
+        finalRec.claudeCodeCommand = {
+          ...finalRec.claudeCodeCommand,
+          systemPromptPrefix: hardenedPrompt + '\n\n' + (finalRec.claudeCodeCommand.systemPromptPrefix ?? ''),
+        };
       }
 
       // ── Step 7c: Execute (caching + streaming) ────
@@ -442,12 +474,12 @@ async function runGodModePipeline(
       );
 
       // ── Step 7d: Quality cascade (runs inside executor) + record result ──
-      statusBar.recordExecution(result);
-
       if (!result.success) {
         void vscode.window.showErrorMessage(`ORC: Execution failed — ${result.error}`);
         return;
       }
+
+      statusBar.recordExecution(result);
 
       // ── Step 7e: Post-run advisories ──────────────
       if (result.cacheHit && result.cacheSavingsUSD > 0.001) {
@@ -470,7 +502,7 @@ async function runGodModePipeline(
         void vscode.window.showInformationMessage(`ORC Advisor: ${tierAdvice.reason}`, 'Dismiss');
       }
     },
-  );
+  )).finally(() => { _pipelineRunning = false; });
 }
 
 // ─────────────────────────────────────────────
@@ -494,11 +526,10 @@ async function sendToClaudeCode(prompt: string): Promise<void> {
     return;
   }
 
-  // Use Claude Code's URI handler to open with the prompt
-  const uri = vscode.Uri.parse(
-    `vscode://anthropic.claude-code/open?prompt=${encodeURIComponent(prompt)}`,
+  await vscode.env.clipboard.writeText(prompt);
+  void vscode.window.showInformationMessage(
+    'ORC: Prompt copied to clipboard — paste into Claude Code chat (Ctrl+L).',
   );
-  await vscode.env.openExternal(uri);
 }
 
 // ─────────────────────────────────────────────
@@ -513,7 +544,7 @@ function getOrcConfig(): OrcConfig {
     analyzerMode:            cfg.get<OrcConfig['analyzerMode']>('analyzerMode', 'auto'),
     defaultBias:             cfg.get<OrcConfig['defaultBias']>('defaultBias', 'claude'),
     showCostWarnings:        cfg.get<boolean>('showCostWarnings', true),
-    costWarningThresholdUSD: cfg.get<number>('costWarningThresholdUSD', 0.10),
+    costWarningThresholdUSD: cfg.get<number>('costWarningThresholdUSD', 0.1),
     autoApplyToClaudeCode:   cfg.get<boolean>('autoApplyToClaudeCode', false),
     statusBarEnabled:        cfg.get<boolean>('statusBarEnabled', true),
     claudeCodeSettingsPath:  cfg.get<string>('claudeCodeSettingsPath', ''),
@@ -526,4 +557,5 @@ function getOrcConfig(): OrcConfig {
 
 export function deactivate(): void {
   statusBar?.dispose();
+  disposeOutputChannel();
 }

@@ -3,11 +3,27 @@
   "displayName": "ORC — Cognitive Prompt Router",
   "description": "Routes prompts to the optimal AI model and effort level based on cognitive load analysis. Heavily optimized for Claude Code in VS Code.",
   "version": "0.1.0",
+  "publisher": "anthonyjohnson",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ajohnsonnow/orc-vsix"
+  },
+  "bugs": {
+    "url": "https://github.com/ajohnsonnow/orc-vsix/issues"
+  },
+  "homepage": "https://github.com/ajohnsonnow/orc-vsix#readme",
+  "pricing": "Free",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
-    "AI",
+    "Machine Learning",
     "Other"
   ],
   "keywords": [
@@ -71,7 +87,11 @@
       "properties": {
         "orc.analyzerMode": {
           "type": "string",
-          "enum": ["llm", "heuristic", "auto"],
+          "enum": [
+            "llm",
+            "heuristic",
+            "auto"
+          ],
           "default": "auto",
           "description": "How to analyze prompt complexity. 'auto' uses LLM if API key is set, otherwise heuristic.",
           "enumDescriptions": [
@@ -82,7 +102,11 @@
         },
         "orc.defaultBias": {
           "type": "string",
-          "enum": ["claude", "balanced", "cost"],
+          "enum": [
+            "claude",
+            "balanced",
+            "cost"
+          ],
           "default": "claude",
           "description": "Routing bias. 'claude' heavily prefers Claude models (optimal for Claude Code in VS Code).",
           "enumDescriptions": [
@@ -98,7 +122,7 @@
         },
         "orc.costWarningThresholdUSD": {
           "type": "number",
-          "default": 0.10,
+          "default": 0.1,
           "description": "Show a cost warning when a single prompt is estimated to exceed this amount (USD)."
         },
         "orc.autoApplyToClaudeCode": {
@@ -114,7 +138,8 @@
         "orc.claudeCodeSettingsPath": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to your Claude Code settings.json. Leave empty to auto-detect (~/.claude/settings.json)."
+          "scope": "machine",
+          "description": "Absolute path to your Claude Code settings.json. Must be a .json file inside ~/.claude/. Leave empty to auto-detect."
         }
       }
     },
@@ -165,25 +190,50 @@
       }
     ]
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "API calls and settings writes are disabled in untrusted workspaces.",
+      "restrictedConfigurations": ["orc.claudeCodeSettingsPath"]
+    }
+  },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --minify",
+    "compile": "tsc -p ./ --noEmit && esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --sourcemap",
+    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --sourcemap --watch",
     "pretest": "npm run compile",
     "lint": "eslint src --ext ts",
     "test:unit": "vitest run",
-    "test:unit:watch": "vitest"
+    "test:unit:watch": "vitest",
+    "prepare": "husky",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "audit:baseline": "node scripts/audit-baseline.mjs",
+    "audit:deps": "osv-scanner --lockfile package-lock.json",
+    "audit:licenses": "license-checker --production --onlyAllow 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;CC0-1.0;Unlicense;0BSD'",
+    "audit:secrets": "gitleaks detect --no-banner",
+    "audit:deps:interactive": "npx npm-check-updates"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
+    "@eslint/js": "^9.0.0",
     "@types/node": "^20.x",
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^7.x",
     "@typescript-eslint/parser": "^7.x",
+    "esbuild": "^0.28.1",
     "eslint": "^8.x",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0",
+    "markdownlint-cli2": "^0.22.1",
+    "prettier": "^3.0.0",
     "typescript": "^5.x",
+    "typescript-eslint": "^8.0.0",
     "vitest": "^4.x"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0"
+    "@anthropic-ai/sdk": "^0.104.1"
   }
 }

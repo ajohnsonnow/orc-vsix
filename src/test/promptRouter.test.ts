@@ -36,14 +36,17 @@ describe('MODEL_REGISTRY', () => {
   it('all Anthropic models have supportsThinking correctly set', () => {
     const haiku = MODEL_REGISTRY['claude-haiku-4-5'];
     const sonnet = MODEL_REGISTRY['claude-sonnet-4-6'];
-    const opus = MODEL_REGISTRY['claude-opus-4-6'];
+    const opus = MODEL_REGISTRY['claude-opus-4-8'];
     expect(haiku.supportsThinking).toBe(false);
     expect(sonnet.supportsThinking).toBe(true);
     expect(opus.supportsThinking).toBe(true);
+    expect(MODEL_REGISTRY['claude-fable-5'].supportsThinking).toBe(true);
+    expect(MODEL_REGISTRY['claude-fable-5'].alwaysThinking).toBe(true);
   });
 
-  it('Opus has the largest context window (1M)', () => {
-    expect(MODEL_REGISTRY['claude-opus-4-6'].contextWindow).toBe(1_000_000);
+  it('flagship models have 1M context window', () => {
+    expect(MODEL_REGISTRY['claude-opus-4-8'].contextWindow).toBe(1_000_000);
+    expect(MODEL_REGISTRY['claude-fable-5'].contextWindow).toBe(1_000_000);
   });
 
   it('every model has a valid provider', () => {
@@ -70,9 +73,14 @@ describe('buildRecommendation — claude bias', () => {
     expect(rec.primaryModel.id).toContain('sonnet');
   });
 
-  it('routes extreme tier to Opus', () => {
+  it('routes high tier to Opus 4.8', () => {
+    const rec = buildRecommendation(fakeAnalysis('high'), meta, 'claude', 0.10);
+    expect(rec.primaryModel.id).toBe('claude-opus-4-8');
+  });
+
+  it('routes extreme tier to Fable 5', () => {
     const rec = buildRecommendation(fakeAnalysis('extreme'), meta, 'claude', 0.10);
-    expect(rec.primaryModel.id).toContain('opus');
+    expect(rec.primaryModel.id).toBe('claude-fable-5');
   });
 
   it('always returns an Anthropic model for claude bias', () => {

@@ -52,7 +52,9 @@ export function buildCacheAwarePayload(
   userPrompt: string,
   estimateTokens: (text: string) => number,
 ): CacheAwarePayload {
-  const MIN_CACHEABLE_TOKENS = 1024;
+  // Anthropic minimum: 4096 for Haiku/Opus, 2048 for Sonnet/Fable 5.
+  // Use the conservative maximum so we never submit under-threshold blocks.
+  const MIN_CACHEABLE_TOKENS = 4096;
 
   const systemTokens = estimateTokens(systemPrompt);
   const contextTokens = estimateTokens(contextDocument);
@@ -81,7 +83,7 @@ export function buildCacheAwarePayload(
   if (contextDocument.trim() && contextTokens >= MIN_CACHEABLE_TOKENS) {
     const docBlock: Anthropic.Messages.TextBlockParam = {
       type: 'text',
-      text: contextDocument,
+      text: `<editor_context>\n${contextDocument}\n</editor_context>`,
     };
     (docBlock as unknown as Record<string, unknown>)['cache_control'] = { type: 'ephemeral' };
     userContentParts.push(docBlock);
@@ -89,7 +91,7 @@ export function buildCacheAwarePayload(
     cacheableTokens += contextTokens;
   } else if (contextDocument.trim()) {
     // Context too small to cache — still include it, just without breakpoint
-    userContentParts.push({ type: 'text', text: contextDocument });
+    userContentParts.push({ type: 'text', text: `<editor_context>\n${contextDocument}\n</editor_context>` });
   }
 
   // Dynamic user prompt — always last, never cached

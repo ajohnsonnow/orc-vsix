@@ -73,14 +73,10 @@ export async function countTokensViaAPI(
       params['system'] = systemPrompt;
     }
 
-    // Use the beta count_tokens endpoint
-    const result = await (client as unknown as {
-      beta: {
-        messages: {
-          countTokens: (params: Record<string, unknown>) => Promise<{ input_tokens: number }>
-        }
-      }
-    }).beta.messages.countTokens(params);
+    // Use the GA count_tokens endpoint (free — not billed)
+    const result = await (client.messages as unknown as {
+      countTokens: (params: Record<string, unknown>) => Promise<{ input_tokens: number }>
+    }).countTokens(params);
 
     return {
       tokens: result.input_tokens,

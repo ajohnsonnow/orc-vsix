@@ -1,4 +1,4 @@
-{
+﻿{
   "snyk.advanced.autoSelectOrganization": true,
   "editor.formatOnSave": true,
   "editor.trimAutoWhitespace": true,
@@ -8,5 +8,31 @@
   "eslint.validate": ["typescript"],
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
+  },
+  "mcp.servers": {
+    "fetch": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "env": {}
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {}
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${env:BRAVE_API_KEY}"
+      }
+    }
   }
 }

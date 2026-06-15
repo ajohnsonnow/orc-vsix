@@ -42,10 +42,13 @@ export interface GodModeExecutionResult extends ExecutionResult {
 let _outputChannel: vscode.OutputChannel | null = null;
 
 function getOutputChannel(): vscode.OutputChannel {
-  if (!_outputChannel) {
-    _outputChannel = vscode.window.createOutputChannel('ORC Response', 'markdown');
-  }
+  _outputChannel ??= vscode.window.createOutputChannel('ORC Response', 'markdown');
   return _outputChannel;
+}
+
+export function disposeOutputChannel(): void {
+  _outputChannel?.dispose();
+  _outputChannel = null;
 }
 
 // ─────────────────────────────────────────────
@@ -84,13 +87,13 @@ export async function executeRecommendation(
 
   if (!apiKey) {
     return buildErrorResult(rec, 0,
-      'No Anthropic API key. Set orca.anthropicApiKey in VS Code Settings.');
+      "No Anthropic API key. Run 'ORC: Set Anthropic API Key' from the Command Palette.");
   }
 
   const client = getClient(apiKey);
   const systemPrompt = rec.claudeCodeCommand?.systemPromptPrefix ?? '';
-  const useThinking = rec.thinkingBudget > 0 && rec.primaryModel.supportsThinking;
-  const temperature = useThinking ? 1.0 : rec.temperature;
+  const useThinking = rec.thinkingBudget > 0 && rec.primaryModel.supportsThinking
+    || (rec.primaryModel.alwaysThinking ?? false);
 
   // ── Prompt caching payload ───────────────────
   const cacheOrderCheck = validateCacheOrdering(systemPrompt, contextText ?? '', prompt);
@@ -105,21 +108,17 @@ export async function executeRecommendation(
   // ── Output channel header ────────────────────
   channel.clear();
   channel.show(true);
+  const thinkingInfo = useThinking ? `thinking: ${rec.thinkingBudget.toLocaleString()} tokens` : 'no thinking';
+  const cacheInfo = hasCacheBreakpoints ? `${(cacheableTokens / 1000).toFixed(1)}k tokens cacheable` : 'not cached';
   channel.appendLine(`# Orca → ${rec.primaryModel.displayName}`);
-  channel.appendLine(
-    `> Score ${rec.analysis.score}/10 · ${rec.analysis.tier} · ` +
-    `${useThinking ? `thinking: ${rec.thinkingBudget.toLocaleString()} tokens` : 'no thinking'} · ` +
-    `cache: ${hasCacheBreakpoints ? `${(cacheableTokens/1000).toFixed(1)}k tokens cacheable` : 'not cached'}`,
-  );
+  channel.appendLine(`> Score ${rec.analysis.score}/10 · ${rec.analysis.tier} · ${thinkingInfo} · cache: ${cacheInfo}`);
   if (!cacheOrderCheck.isOptimal) {
     channel.appendLine(`> ⚠ Cache Warning: ${cacheOrderCheck.warning}`);
   }
   channel.appendLine('');
 
   // ── Execute primary call ─────────────────────
-  const primaryResult = await streamAnthropicCall(
-    client, rec, system, messages, useThinking, temperature, channel,
-  );
+  const primaryResult = await streamAnthropicCall(client, rec, system, messages, channel);
 
   if (!primaryResult.success) {
     return { ...primaryResult, cacheHit: false, cacheWriteTokens: 0, cacheReadTokens: 0, cacheSavingsUSD: 0, qualityScore: 0, wasEscalated: false, thinkingPreview: '' };
@@ -142,15 +141,20 @@ export async function executeRecommendation(
 
   // ── Auto-escalate if cascade failed ──────────
   if (cascadeResult.needsEscalation) {
-    const escalateChoice = await vscode.window.showWarningMessage(
-      `Orca Cascade: ${cascadeResult.escalationMessage}`,
-      'Escalate Now',
-      'Keep Result',
-    );
+    const escalatedModel = getEscalatedModel(rec.primaryModel.id);
+    const maxAllowed = tierIndex(rec.analysis.tier);
+    const canEscalate = escalatedModel !== null && tierIndex(escalatedModel.tier) <= maxAllowed;
 
-    if (escalateChoice === 'Escalate Now') {
-      const escalatedModel = getEscalatedModel(rec.primaryModel.id);
-      if (escalatedModel) {
+    if (canEscalate && escalatedModel) {
+      const estCost = ((rec.maxOutputTokens + rec.thinkingBudget) / 1_000_000) * escalatedModel.inputCostPerMillion;
+      const escalateLabel = `Escalate to ${escalatedModel.displayName} (~$${estCost.toFixed(4)})`;
+      const escalateChoice = await vscode.window.showWarningMessage(
+        `Orca Cascade: ${cascadeResult.escalationMessage}`,
+        escalateLabel,
+        'Keep Result',
+      );
+
+      if (escalateChoice === escalateLabel) {
         channel.appendLine('');
         channel.appendLine(`---`);
         channel.appendLine(`## Escalating to ${escalatedModel.displayName}...`);
@@ -159,15 +163,12 @@ export async function executeRecommendation(
         const escalatedRec: RouteRecommendation = {
           ...rec,
           primaryModel: escalatedModel,
-          thinkingBudget: Math.min(rec.thinkingBudget * 2 || 4096, 32000),
+          thinkingBudget: rec.thinkingBudget > 0
+            ? Math.min(rec.thinkingBudget * 2, escalatedModel.maxThinkingBudget || 32000)
+            : 0,
         };
 
-        const escalatedResult = await streamAnthropicCall(
-          client, escalatedRec, system, messages,
-          escalatedModel.supportsThinking && escalatedRec.thinkingBudget > 0,
-          escalatedModel.supportsThinking ? 1.0 : rec.temperature,
-          channel,
-        );
+        const escalatedResult = await streamAnthropicCall(client, escalatedRec, system, messages, channel);
 
         const duration = Date.now() - startMs;
         return {
@@ -177,7 +178,7 @@ export async function executeRecommendation(
           cacheWriteTokens: escalatedResult.cacheWriteTokens ?? 0,
           cacheReadTokens: escalatedResult.cacheReadTokens ?? 0,
           cacheSavingsUSD: escalatedResult.cacheSavingsUSD ?? 0,
-          qualityScore: 85, // post-escalation assumed improvement
+          qualityScore: 85,
           wasEscalated: true,
           escalatedToModel: escalatedModel.id,
           thinkingPreview: escalatedResult.thinkingPreview ?? '',
@@ -202,147 +203,208 @@ export async function executeRecommendation(
 
 interface StreamResult extends GodModeExecutionResult {}
 
-async function streamAnthropicCall(
-  client: Anthropic,
+interface StreamState {
+  fullText: string;
+  thinkingText: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  isInThinkingBlock: boolean;
+  thinkingDotsCount: number;
+}
+
+function applyContentDelta(
+  delta: Record<string, unknown>,
+  state: StreamState,
+  channel: vscode.OutputChannel,
+): void {
+  if (delta['type'] === 'thinking_delta') {
+    const thinking = (delta['thinking'] as string) ?? '';
+    state.thinkingText += thinking;
+    state.thinkingDotsCount += thinking.length;
+    if (state.thinkingDotsCount > 100) {
+      channel.append('·');
+      state.thinkingDotsCount = 0;
+    }
+  } else if (delta['type'] === 'text_delta') {
+    const text = (delta['text'] as string) ?? '';
+    state.fullText += text;
+    channel.append(text);
+  }
+}
+
+function processStreamEvent(
+  event: Record<string, unknown>,
+  state: StreamState,
+  channel: vscode.OutputChannel,
+): void {
+  const type = event['type'];
+
+  if (type === 'message_start') {
+    const usage = (event['message'] as Record<string, unknown>)?.['usage'] as Record<string, number> | undefined;
+    state.inputTokens = usage?.['input_tokens'] ?? 0;
+    state.cacheCreationTokens = usage?.['cache_creation_input_tokens'] ?? 0;
+    state.cacheReadTokens = usage?.['cache_read_input_tokens'] ?? 0;
+    if (state.cacheReadTokens > 0) {
+      channel.appendLine(`> Cache HIT: ${state.cacheReadTokens.toLocaleString()} tokens served from cache`);
+      channel.appendLine('');
+    } else if (state.cacheCreationTokens > 0) {
+      channel.appendLine(`> Cache WRITE: ${state.cacheCreationTokens.toLocaleString()} tokens written to cache`);
+      channel.appendLine('');
+    }
+    return;
+  }
+
+  if (type === 'content_block_start') {
+    const blockType = ((event['content_block'] as Record<string, unknown>)?.['type'] as string) ?? '';
+    if (blockType === 'thinking') {
+      state.isInThinkingBlock = true;
+      channel.appendLine('> *[Extended thinking in progress...]*');
+      state.thinkingDotsCount = 0;
+    } else if (blockType === 'text' && state.isInThinkingBlock) {
+      channel.appendLine('');
+      channel.appendLine('---');
+      state.isInThinkingBlock = false;
+    }
+    return;
+  }
+
+  if (type === 'content_block_delta') {
+    const delta = event['delta'] as Record<string, unknown> | undefined;
+    if (delta) { applyContentDelta(delta, state, channel); }
+    return;
+  }
+
+  if (type === 'message_delta') {
+    const usage = event['usage'] as Record<string, number> | undefined;
+    state.outputTokens = usage?.['output_tokens'] ?? 0;
+  }
+}
+
+const MODEL_MAX_OUTPUT: Record<string, number> = {
+  'claude-fable-5':            128_000,
+  'claude-opus-4-8':            32_000,
+  'claude-sonnet-4-6':          16_000,
+  'claude-haiku-4-5':            8_000,
+  'claude-haiku-4-5-20251001':   8_000,
+};
+
+function buildRequestParams(
   rec: RouteRecommendation,
   system: Anthropic.Messages.TextBlockParam[],
   messages: Anthropic.Messages.MessageParam[],
-  useThinking: boolean,
-  temperature: number,
-  channel: vscode.OutputChannel,
-): Promise<StreamResult> {
-  const requestParams: Record<string, unknown> = {
-    model: rec.primaryModel.id,
-    max_tokens: rec.maxOutputTokens + (useThinking ? rec.thinkingBudget : 0),
-    temperature,
+): Record<string, unknown> {
+  const model = rec.primaryModel;
+  const useThinking = (rec.thinkingBudget > 0 && model.supportsThinking) || (model.alwaysThinking ?? false);
+  const modelMax = MODEL_MAX_OUTPUT[model.id] ?? 16_000;
+
+  const params: Record<string, unknown> = {
+    model: model.id,
+    max_tokens: Math.min(rec.maxOutputTokens + (useThinking ? rec.thinkingBudget : 0), modelMax),
     messages,
     stream: true,
   };
 
   if (system.length > 0) {
-    requestParams['system'] = system;
+    params['system'] = system;
   }
 
+  // Temperature: Opus 4.8+ and Fable 5 return 400 if temperature is sent
+  if (model.supportsTemperature !== false) {
+    params['temperature'] = useThinking ? 1 : rec.temperature;
+  }
+
+  // Thinking: Fable 5/Opus 4.8+ use adaptive format (no budget_tokens)
   if (useThinking) {
-    requestParams['thinking'] = {
-      type: 'enabled',
-      budget_tokens: rec.thinkingBudget,
-    };
+    if (model.alwaysThinking || model.supportsTemperature === false) {
+      params['thinking'] = { type: 'adaptive' };
+    } else {
+      params['thinking'] = { type: 'enabled', budget_tokens: rec.thinkingBudget };
+    }
   }
 
-  let fullText = '';
-  let thinkingText = '';
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheCreationTokens = 0;
-  let cacheReadTokens = 0;
-  let isInThinkingBlock = false;
-  let thinkingDotsCount = 0;
+  return params;
+}
+
+async function streamAnthropicCall(
+  client: Anthropic,
+  rec: RouteRecommendation,
+  system: Anthropic.Messages.TextBlockParam[],
+  messages: Anthropic.Messages.MessageParam[],
+  channel: vscode.OutputChannel,
+): Promise<StreamResult> {
+  const requestParams = buildRequestParams(rec, system, messages);
+
+  const state: StreamState = {
+    fullText: '',
+    thinkingText: '',
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    isInThinkingBlock: false,
+    thinkingDotsCount: 0,
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
 
   try {
     const stream = client.messages.stream(
       requestParams as unknown as Anthropic.Messages.MessageCreateParamsStreaming,
+      { signal: controller.signal },
     );
 
     for await (const event of stream) {
-      if (event.type === 'message_start') {
-        const usage = event.message.usage as unknown as Record<string, number> | undefined;
-        inputTokens = usage?.['input_tokens'] ?? 0;
-        cacheCreationTokens = usage?.['cache_creation_input_tokens'] ?? 0;
-        cacheReadTokens = usage?.['cache_read_input_tokens'] ?? 0;
-
-        if (cacheReadTokens > 0) {
-          channel.appendLine(`> Cache HIT: ${cacheReadTokens.toLocaleString()} tokens served from cache`);
-          channel.appendLine('');
-        } else if (cacheCreationTokens > 0) {
-          channel.appendLine(`> Cache WRITE: ${cacheCreationTokens.toLocaleString()} tokens written to cache`);
-          channel.appendLine('');
-        }
-      }
-
-      if (event.type === 'content_block_start') {
-        const block = event.content_block;
-        if ((block as { type: string }).type === 'thinking') {
-          isInThinkingBlock = true;
-          channel.appendLine('> *[Extended thinking in progress...]*');
-          thinkingDotsCount = 0;
-        } else if ((block as { type: string }).type === 'text') {
-          if (isInThinkingBlock) {
-            channel.appendLine('');
-            channel.appendLine('---');
-          }
-          isInThinkingBlock = false;
-        }
-      }
-
-      if (event.type === 'content_block_delta') {
-        const delta = event.delta as unknown as Record<string, unknown>;
-
-        if (delta['type'] === 'thinking_delta') {
-          const thinking = delta['thinking'] as string;
-          thinkingText += thinking;
-          // Show dots as thinking progresses (every 100 chars)
-          thinkingDotsCount += thinking.length;
-          if (thinkingDotsCount > 100) {
-            channel.append('·');
-            thinkingDotsCount = 0;
-          }
-        } else if (delta['type'] === 'text_delta') {
-          const text = delta['text'] as string;
-          fullText += text;
-          channel.append(text);
-        }
-      }
-
-      if (event.type === 'message_delta') {
-        const usage = (event as unknown as Record<string, unknown>)['usage'] as Record<string, number> | undefined;
-        outputTokens = usage?.['output_tokens'] ?? 0;
-      }
+      processStreamEvent(event as unknown as Record<string, unknown>, state, channel);
     }
 
-    // ── Cost calculation ─────────────────────────
-    const inputCost = (inputTokens / 1_000_000) * rec.primaryModel.inputCostPerMillion;
-    const outputCost = (outputTokens / 1_000_000) * rec.primaryModel.outputCostPerMillion;
-    const costUSD = inputCost + outputCost;
-
+    const inputCost = (state.inputTokens / 1_000_000) * rec.primaryModel.inputCostPerMillion;
+    const outputCost = (state.outputTokens / 1_000_000) * rec.primaryModel.outputCostPerMillion;
+    const cacheWriteCost = (state.cacheCreationTokens / 1_000_000) * rec.primaryModel.inputCostPerMillion * 1.25;
+    const cacheReadCost = (state.cacheReadTokens / 1_000_000) * rec.primaryModel.inputCostPerMillion * 0.1;
+    const costUSD = inputCost + outputCost + cacheWriteCost + cacheReadCost;
     const cacheStats = extractCacheStats(
       {
-        input_tokens: inputTokens,
-        cache_creation_input_tokens: cacheCreationTokens,
-        cache_read_input_tokens: cacheReadTokens,
+        input_tokens: state.inputTokens,
+        cache_creation_input_tokens: state.cacheCreationTokens,
+        cache_read_input_tokens: state.cacheReadTokens,
       },
       rec.primaryModel.inputCostPerMillion,
     );
-
-    const thinkingTokens = Math.ceil(thinkingText.length / 4);
+    const thinkingTokens = Math.ceil(state.thinkingText.length / 4);
+    const cacheSavedStr = cacheStats.wasAHit
+      ? ` · cache saved $${cacheStats.estimatedSavingsUSD.toFixed(5)}`
+      : '';
 
     channel.appendLine('');
     channel.appendLine('---');
     channel.appendLine(
-      `*${rec.primaryModel.displayName} · in:${inputTokens} out:${outputTokens} ` +
-      `think:${thinkingTokens} · $${costUSD.toFixed(5)}` +
-      (cacheStats.wasAHit ? ` · cache saved $${cacheStats.estimatedSavingsUSD.toFixed(5)}` : '') +
-      '*',
+      `*${rec.primaryModel.displayName} · in:${state.inputTokens} out:${state.outputTokens} ` +
+      `think:${thinkingTokens} · $${costUSD.toFixed(5)}${cacheSavedStr}*`,
     );
 
+    clearTimeout(timeoutId);
     return {
       success: true,
-      content: fullText,
-      inputTokens,
-      outputTokens,
+      content: state.fullText,
+      inputTokens: state.inputTokens,
+      outputTokens: state.outputTokens,
       thinkingTokens,
       costUSD,
       modelUsed: rec.primaryModel.id,
-      durationMs: 0, // set by caller
+      durationMs: 0,
       cacheHit: cacheStats.wasAHit,
-      cacheWriteTokens: cacheCreationTokens,
-      cacheReadTokens,
+      cacheWriteTokens: state.cacheCreationTokens,
+      cacheReadTokens: state.cacheReadTokens,
       cacheSavingsUSD: cacheStats.estimatedSavingsUSD,
-      qualityScore: 0, // set by caller after cascade
+      qualityScore: 0,
       wasEscalated: false,
-      thinkingPreview: thinkingText.slice(0, 200),
+      thinkingPreview: state.thinkingText.slice(0, 200),
     };
   } catch (err) {
+    clearTimeout(timeoutId);
     const message = err instanceof Error ? err.message : String(err);
     channel.appendLine(`\n**Error:** ${message}`);
     return buildErrorResult(rec, 0, message);

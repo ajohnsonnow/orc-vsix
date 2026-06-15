@@ -1,0 +1,7 @@
+{
+  "entry": ["src/index.ts!", "src/main.ts!", "scripts/*.mjs!"],
+  "project": ["src/**/*.ts!", "scripts/**/*.mjs!"],
+  "ignoreDependencies": ["@types/*"],
+  "ignoreBinaries": ["husky", "lint-staged"],
+  "ignore": ["coverage/**", "dist/**", ".vitepress/**"]
+}

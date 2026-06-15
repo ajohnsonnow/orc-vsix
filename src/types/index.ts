@@ -32,9 +32,13 @@ export interface ModelSpec {
   inputCostPerMillion: number;  // USD
   outputCostPerMillion: number; // USD
   supportsThinking: boolean;
-  maxThinkingBudget: number;    // tokens (0 if not supported)
+  maxThinkingBudget: number;    // tokens (0 if not supported; ignored when alwaysThinking)
   tier: RoutingTier;
   strengths: string[];
+  /** If true, thinking is always on and cannot be disabled (Fable 5). Do not pass budget_tokens. */
+  alwaysThinking?: boolean;
+  /** If false, do not pass temperature/top_p/top_k to the API (Fable 5). */
+  supportsTemperature?: boolean;
 }
 
 // ─────────────────────────────────────────────
@@ -127,7 +131,8 @@ export type ApprovalOutcome =
   | 'overridden'        // user picked a different model
   | 'escalated'         // user upgraded to a higher tier
   | 'downgraded'        // user downgraded to a lower tier
-  | 'cancelled';        // user dismissed
+  | 'cancelled'         // user dismissed
+  | 'settings-only';    // user wrote settings to Claude Code but did not run the model
 
 export interface ApprovalResult {
   outcome: ApprovalOutcome;

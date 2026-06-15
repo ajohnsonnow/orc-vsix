@@ -26,7 +26,7 @@ import type {
 } from '../types/index.js';
 
 // ─────────────────────────────────────────────
-//  Model Registry (2026 pricing from research)
+//  Model Registry (2026 — verified pricing & IDs)
 // ─────────────────────────────────────────────
 
 export const MODEL_REGISTRY: Record<string, ModelSpec> = {
@@ -47,7 +47,7 @@ export const MODEL_REGISTRY: Record<string, ModelSpec> = {
     id: 'claude-sonnet-4-6',
     displayName: 'Claude Sonnet 4.6',
     provider: 'anthropic',
-    contextWindow: 200_000,
+    contextWindow: 1_000_000,
     inputCostPerMillion: 3.00,
     outputCostPerMillion: 15.00,
     supportsThinking: true,
@@ -55,32 +55,47 @@ export const MODEL_REGISTRY: Record<string, ModelSpec> = {
     tier: 'medium',
     strengths: ['daily development', 'code review', 'documentation', 'most agentic tasks', 'balanced cost'],
   },
-  'claude-opus-4-6': {
-    id: 'claude-opus-4-6',
-    displayName: 'Claude Opus 4.6',
+  'claude-opus-4-8': {
+    id: 'claude-opus-4-8',
+    displayName: 'Claude Opus 4.8',
     provider: 'anthropic',
     contextWindow: 1_000_000,
     inputCostPerMillion: 5.00,
     outputCostPerMillion: 25.00,
     supportsThinking: true,
     maxThinkingBudget: 32_000,
-    tier: 'extreme',
+    tier: 'high',
+    supportsTemperature: false,
     strengths: ['complex reasoning', 'architecture', 'security review', 'ambiguous tasks', 'long agentic runs'],
   },
+  'claude-fable-5': {
+    id: 'claude-fable-5',
+    displayName: 'Claude Fable 5',
+    provider: 'anthropic',
+    contextWindow: 1_000_000,
+    inputCostPerMillion: 10.00,
+    outputCostPerMillion: 50.00,
+    supportsThinking: true,
+    maxThinkingBudget: 128_000,
+    tier: 'extreme',
+    alwaysThinking: true,
+    supportsTemperature: false,
+    strengths: ['hardest reasoning', 'Mythos-class problems', 'architecture decisions', 'research-grade analysis'],
+  },
   // ── OpenAI ────────────────────────────────
-  'o3-mini': {
-    id: 'o3-mini',
-    displayName: 'OpenAI o3-mini',
+  'o4-mini': {
+    id: 'o4-mini',
+    displayName: 'OpenAI o4-mini',
     provider: 'openai',
     contextWindow: 200_000,
-    inputCostPerMillion: 1.10,
-    outputCostPerMillion: 4.40,
+    inputCostPerMillion: 0.55,
+    outputCostPerMillion: 2.20,
     supportsThinking: true,
-    maxThinkingBudget: 0, // managed internally by OpenAI reasoning_effort
+    maxThinkingBudget: 0,
     tier: 'medium',
-    strengths: ['STEM', 'fast logic', 'coding', 'math', 'batch API pricing'],
+    strengths: ['STEM', 'fast logic', 'coding', 'math', 'cost-efficient reasoning'],
   },
-  'o3-global': {
+  'o3': {
     id: 'o3',
     displayName: 'OpenAI o3',
     provider: 'openai',
@@ -89,7 +104,7 @@ export const MODEL_REGISTRY: Record<string, ModelSpec> = {
     outputCostPerMillion: 8.00,
     supportsThinking: true,
     maxThinkingBudget: 0,
-    tier: 'extreme',
+    tier: 'high',
     strengths: ['unconstrained logic', 'mathematical proofs', 'deep reasoning'],
   },
   // ── Google ────────────────────────────────
@@ -98,49 +113,61 @@ export const MODEL_REGISTRY: Record<string, ModelSpec> = {
     displayName: 'Gemini 3.1 Flash-Lite',
     provider: 'google',
     contextWindow: 1_000_000,
-    inputCostPerMillion: 0.25,
-    outputCostPerMillion: 1.50,
+    inputCostPerMillion: 0.10,
+    outputCostPerMillion: 0.40,
     supportsThinking: false,
     maxThinkingBudget: 0,
     tier: 'minimal',
     strengths: ['high-volume data ops', 'ultra-low cost', 'massive context'],
   },
-  'gemini-3-flash': {
-    id: 'gemini-3-flash',
-    displayName: 'Gemini 3 Flash',
+  'gemini-3-5-flash': {
+    id: 'gemini-3.5-flash',
+    displayName: 'Gemini 3.5 Flash',
     provider: 'google',
     contextWindow: 1_000_000,
-    inputCostPerMillion: 0.50,
-    outputCostPerMillion: 3.00,
+    inputCostPerMillion: 1.50,
+    outputCostPerMillion: 9.00,
     supportsThinking: true,
     maxThinkingBudget: 0,
-    tier: 'low',
-    strengths: ['high intelligence', 'low latency', 'cost-efficient reasoning'],
+    tier: 'medium',
+    strengths: ['high intelligence', 'low latency', 'cost-efficient reasoning', 'multimodal'],
   },
-  'gemini-3-pro': {
+  'gemini-3-1-pro': {
     id: 'gemini-3.1-pro',
     displayName: 'Gemini 3.1 Pro',
     provider: 'google',
     contextWindow: 1_000_000,
-    inputCostPerMillion: 4.00,
-    outputCostPerMillion: 18.00,
+    inputCostPerMillion: 2.00,
+    outputCostPerMillion: 12.00,
     supportsThinking: true,
     maxThinkingBudget: 0,
-    tier: 'extreme',
+    tier: 'high',
     strengths: ['massive multimodal', 'dynamic context scaling', 'complex reasoning'],
   },
   // ── DeepSeek ──────────────────────────────
-  'deepseek-v3': {
-    id: 'deepseek-v3-2',
-    displayName: 'DeepSeek V3.2',
+  'deepseek-v4-flash': {
+    id: 'deepseek-v4-flash',
+    displayName: 'DeepSeek V4 Flash',
     provider: 'deepseek',
-    contextWindow: 128_000,
+    contextWindow: 1_000_000,
     inputCostPerMillion: 0.14,
-    outputCostPerMillion: 0.42,
+    outputCostPerMillion: 0.28,
     supportsThinking: false,
     maxThinkingBudget: 0,
     tier: 'low',
-    strengths: ['unmatched cost-efficiency', 'scale', 'prototyping'],
+    strengths: ['unmatched cost-efficiency', 'high-volume processing', 'prototyping'],
+  },
+  'deepseek-v4-pro': {
+    id: 'deepseek-v4-pro',
+    displayName: 'DeepSeek V4 Pro',
+    provider: 'deepseek',
+    contextWindow: 1_000_000,
+    inputCostPerMillion: 0.435,
+    outputCostPerMillion: 0.87,
+    supportsThinking: true,
+    maxThinkingBudget: 0,
+    tier: 'medium',
+    strengths: ['cost-efficient reasoning', 'coding', 'STEM', 'scale'],
   },
 };
 
@@ -162,28 +189,28 @@ function selectModels(
       case 'minimal': return [MODEL_REGISTRY['claude-haiku-4-5'], null];
       case 'low':     return [MODEL_REGISTRY['claude-haiku-4-5'], MODEL_REGISTRY['claude-sonnet-4-6']];
       case 'medium':  return [MODEL_REGISTRY['claude-sonnet-4-6'], MODEL_REGISTRY['claude-haiku-4-5']];
-      case 'high':    return [MODEL_REGISTRY['claude-sonnet-4-6'], MODEL_REGISTRY['claude-opus-4-6']];
-      case 'extreme': return [MODEL_REGISTRY['claude-opus-4-6'], MODEL_REGISTRY['claude-sonnet-4-6']];
+      case 'high':    return [MODEL_REGISTRY['claude-opus-4-8'], MODEL_REGISTRY['claude-sonnet-4-6']];
+      case 'extreme': return [MODEL_REGISTRY['claude-fable-5'], MODEL_REGISTRY['claude-opus-4-8']];
     }
   }
 
   if (bias === 'cost') {
     switch (tier) {
-      case 'minimal': return [MODEL_REGISTRY['gemini-3-flash-lite'], MODEL_REGISTRY['deepseek-v3']];
-      case 'low':     return [MODEL_REGISTRY['deepseek-v3'], MODEL_REGISTRY['gemini-3-flash']];
-      case 'medium':  return [MODEL_REGISTRY['gemini-3-flash'], MODEL_REGISTRY['o3-mini']];
-      case 'high':    return [MODEL_REGISTRY['o3-mini'], MODEL_REGISTRY['claude-sonnet-4-6']];
-      case 'extreme': return [MODEL_REGISTRY['o3-global'], MODEL_REGISTRY['claude-opus-4-6']];
+      case 'minimal': return [MODEL_REGISTRY['gemini-3-flash-lite'], MODEL_REGISTRY['deepseek-v4-flash']];
+      case 'low':     return [MODEL_REGISTRY['deepseek-v4-flash'], MODEL_REGISTRY['gemini-3-5-flash']];
+      case 'medium':  return [MODEL_REGISTRY['deepseek-v4-pro'], MODEL_REGISTRY['o4-mini']];
+      case 'high':    return [MODEL_REGISTRY['o4-mini'], MODEL_REGISTRY['claude-sonnet-4-6']];
+      case 'extreme': return [MODEL_REGISTRY['o3'], MODEL_REGISTRY['claude-opus-4-8']];
     }
   }
 
   // balanced: best model per tier regardless of provider
   switch (tier) {
     case 'minimal': return [MODEL_REGISTRY['claude-haiku-4-5'], MODEL_REGISTRY['gemini-3-flash-lite']];
-    case 'low':     return [MODEL_REGISTRY['gemini-3-flash'], MODEL_REGISTRY['claude-haiku-4-5']];
-    case 'medium':  return [MODEL_REGISTRY['claude-sonnet-4-6'], MODEL_REGISTRY['o3-mini']];
-    case 'high':    return [MODEL_REGISTRY['claude-sonnet-4-6'], MODEL_REGISTRY['claude-opus-4-6']];
-    case 'extreme': return [MODEL_REGISTRY['claude-opus-4-6'], MODEL_REGISTRY['o3-global']];
+    case 'low':     return [MODEL_REGISTRY['gemini-3-5-flash'], MODEL_REGISTRY['deepseek-v4-flash']];
+    case 'medium':  return [MODEL_REGISTRY['claude-sonnet-4-6'], MODEL_REGISTRY['o4-mini']];
+    case 'high':    return [MODEL_REGISTRY['claude-opus-4-8'], MODEL_REGISTRY['o3']];
+    case 'extreme': return [MODEL_REGISTRY['claude-fable-5'], MODEL_REGISTRY['o3']];
   }
 }
 
@@ -290,7 +317,13 @@ function buildClaudeCodeConfig(
   const settingsDelta: Record<string, unknown> = {
     model: model.id,
   };
-  if (thinkingBudget > 0) {
+  if (model.alwaysThinking) {
+    // Fable 5: thinking always on — use adaptive (budget_tokens not accepted)
+    settingsDelta['thinking'] = { type: 'adaptive' };
+  } else if (model.supportsTemperature === false) {
+    // Opus 4.8+: adaptive thinking format (no budget_tokens)
+    settingsDelta['thinking'] = thinkingBudget > 0 ? { type: 'adaptive' } : { type: 'disabled' };
+  } else if (thinkingBudget > 0) {
     settingsDelta['thinking'] = { type: 'enabled', budget_tokens: thinkingBudget };
   } else {
     settingsDelta['thinking'] = { type: 'disabled' };

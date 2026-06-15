@@ -29,10 +29,14 @@ import type { ClaudeCodeConfig } from '../types/index.js';
  * Honours the user-configured override path first.
  */
 export function getClaudeSettingsPath(overridePath?: string): string {
-  if (overridePath && overridePath.trim().length > 0) {
-    return overridePath.trim();
+  const defaultPath = path.join(os.homedir(), '.claude', 'settings.json');
+  if (!overridePath?.trim()) { return defaultPath; }
+  const resolved = path.resolve(overridePath.trim());
+  const allowedRoot = path.join(os.homedir(), '.claude') + path.sep;
+  if (!resolved.startsWith(allowedRoot) || !resolved.endsWith('.json')) {
+    throw new Error(`ORC: claudeCodeSettingsPath must be a .json file inside ~/.claude/. Got: ${resolved}`);
   }
-  return path.join(os.homedir(), '.claude', 'settings.json');
+  return resolved;
 }
 
 // ─────────────────────────────────────────────

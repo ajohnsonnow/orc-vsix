@@ -8,7 +8,7 @@ const estimate = (t: string) => Math.ceil(t.length / 4);
 // ─────────────────────────────────────────────
 
 describe('buildCacheAwarePayload', () => {
-  it('does not add cache breakpoint when system prompt < 1024 tokens', () => {
+  it('does not add cache breakpoint when system prompt < 4096 tokens', () => {
     const { hasCacheBreakpoints, cacheableTokens } = buildCacheAwarePayload(
       'Short system prompt.',
       '',
@@ -19,7 +19,7 @@ describe('buildCacheAwarePayload', () => {
     expect(cacheableTokens).toBe(0);
   });
 
-  it('adds cache breakpoint when system prompt >= 1024 tokens', () => {
+  it('adds cache breakpoint when system prompt >= 4096 tokens', () => {
     const largeSystem = 'x'.repeat(4096 * 4); // ~4096 tokens
     const { hasCacheBreakpoints, cacheableTokens } = buildCacheAwarePayload(
       largeSystem,
@@ -28,11 +28,11 @@ describe('buildCacheAwarePayload', () => {
       estimate,
     );
     expect(hasCacheBreakpoints).toBe(true);
-    expect(cacheableTokens).toBeGreaterThanOrEqual(1024);
+    expect(cacheableTokens).toBeGreaterThanOrEqual(4096);
   });
 
-  it('adds cache breakpoint on context document when >= 1024 tokens', () => {
-    const largeContext = 'function foo() { '.repeat(500); // dense code
+  it('adds cache breakpoint on context document when >= 4096 tokens', () => {
+    const largeContext = 'function foo() { '.repeat(1000); // ~4250 tokens via char/4
     const { hasCacheBreakpoints, cacheableTokens } = buildCacheAwarePayload(
       'Small system.',
       largeContext,
@@ -41,7 +41,7 @@ describe('buildCacheAwarePayload', () => {
     );
     // Only context gets a breakpoint; system is too small
     expect(cacheableTokens).toBeGreaterThan(0);
-    if (estimate(largeContext) >= 1024) {
+    if (estimate(largeContext) >= 4096) {
       expect(hasCacheBreakpoints).toBe(true);
     }
   });

@@ -19,6 +19,9 @@ out/test/**
 # ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/**
 
+# ── Source images (only icon.png is needed) ───────────────────────────────────
+images/Gemini_Generated_Image_*.png
+
 # ── Docs (nice to have but not required in extension package) ─────────────────
 CONTRIBUTING.md
 SECURITY.md

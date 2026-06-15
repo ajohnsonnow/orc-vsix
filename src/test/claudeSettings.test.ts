@@ -9,12 +9,25 @@ import { getClaudeSettingsPath, readClaudeSettings, applyClaudeCodeConfig } from
 // ─────────────────────────────────────────────
 
 describe('getClaudeSettingsPath', () => {
-  it('returns override path when provided', () => {
-    expect(getClaudeSettingsPath('/custom/path/settings.json')).toBe('/custom/path/settings.json');
+  it('accepts a valid override path inside ~/.claude/', () => {
+    const validPath = path.join(os.homedir(), '.claude', 'custom.json');
+    expect(getClaudeSettingsPath(validPath)).toBe(validPath);
   });
 
-  it('trims whitespace from override path', () => {
-    expect(getClaudeSettingsPath('  /custom/path.json  ')).toBe('/custom/path.json');
+  it('trims whitespace from a valid override path inside ~/.claude/', () => {
+    const validPath = path.join(os.homedir(), '.claude', 'custom.json');
+    expect(getClaudeSettingsPath(`  ${validPath}  `)).toBe(validPath);
+  });
+
+  it('throws for override paths outside ~/.claude/', () => {
+    expect(() => getClaudeSettingsPath('/custom/path/settings.json'))
+      .toThrow('must be a .json file inside ~/.claude/');
+  });
+
+  it('throws for override paths that are not .json files', () => {
+    const badPath = path.join(os.homedir(), '.claude', 'settings.txt');
+    expect(() => getClaudeSettingsPath(badPath))
+      .toThrow('must be a .json file inside ~/.claude/');
   });
 
   it('falls back to ~/.claude/settings.json when no override', () => {

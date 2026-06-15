@@ -23,16 +23,13 @@ describe('ESCALATION_MAP (indirect verification)', () => {
 
   it('anthropic models exist in MODEL_REGISTRY at expected tiers', () => {
     const anthropicModels = Object.values(MODEL_REGISTRY).filter(m => m.provider === 'anthropic');
-    expect(anthropicModels.length).toBeGreaterThanOrEqual(3);
+    expect(anthropicModels.length).toBeGreaterThanOrEqual(4);
 
-    // Haiku at minimal, Sonnet at medium, Opus at extreme
-    const haiku = MODEL_REGISTRY['claude-haiku-4-5'];
-    const sonnet = MODEL_REGISTRY['claude-sonnet-4-6'];
-    const opus = MODEL_REGISTRY['claude-opus-4-6'];
-
-    expect(haiku.tier).toBe('minimal');
-    expect(sonnet.tier).toBe('medium');
-    expect(opus.tier).toBe('extreme');
+    // Haiku(minimal) → Sonnet(medium) → Opus 4.8(high) → Fable 5(extreme)
+    expect(MODEL_REGISTRY['claude-haiku-4-5'].tier).toBe('minimal');
+    expect(MODEL_REGISTRY['claude-sonnet-4-6'].tier).toBe('medium');
+    expect(MODEL_REGISTRY['claude-opus-4-8'].tier).toBe('high');
+    expect(MODEL_REGISTRY['claude-fable-5'].tier).toBe('extreme');
   });
 
   it('tier order is strictly ascending for anthropic models', () => {
@@ -48,15 +45,15 @@ describe('ESCALATION_MAP (indirect verification)', () => {
     }
   });
 
-  it('escalation chain: haiku → sonnet → opus', () => {
-    // Verify the expected upgrade path exists
-    const haiku = MODEL_REGISTRY['claude-haiku-4-5'];
+  it('escalation chain: haiku → sonnet → opus 4.8 → fable 5', () => {
+    const haiku  = MODEL_REGISTRY['claude-haiku-4-5'];
     const sonnet = MODEL_REGISTRY['claude-sonnet-4-6'];
-    const opus = MODEL_REGISTRY['claude-opus-4-6'];
+    const opus   = MODEL_REGISTRY['claude-opus-4-8'];
+    const fable  = MODEL_REGISTRY['claude-fable-5'];
 
-    // Haiku is lowest tier, Opus is highest
     expect(TIER_ORDER.indexOf(haiku.tier)).toBeLessThan(TIER_ORDER.indexOf(sonnet.tier));
     expect(TIER_ORDER.indexOf(sonnet.tier)).toBeLessThan(TIER_ORDER.indexOf(opus.tier));
+    expect(TIER_ORDER.indexOf(opus.tier)).toBeLessThan(TIER_ORDER.indexOf(fable.tier));
   });
 });
 

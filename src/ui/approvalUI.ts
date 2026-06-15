@@ -157,7 +157,7 @@ export async function showApprovalDialog(
 
   if (selected.action === 'apply-claude-code') {
     return {
-      outcome: 'approved',
+      outcome: 'settings-only',
       finalRecommendation: rec,
       applyToClaudeCode: true,
     };
@@ -252,8 +252,8 @@ const CLAUDE_TIER_MODELS: Record<RoutingTier, string> = {
   minimal: 'claude-haiku-4-5',
   low:     'claude-haiku-4-5',
   medium:  'claude-sonnet-4-6',
-  high:    'claude-sonnet-4-6',
-  extreme: 'claude-opus-4-6',
+  high:    'claude-opus-4-8',
+  extreme: 'claude-fable-5',
 };
 
 function getNextTierModel(tier: RoutingTier, direction: 'up' | 'down'): ModelSpec | null {
@@ -268,7 +268,7 @@ function getNextTierModel(tier: RoutingTier, direction: 'up' | 'down'): ModelSpe
 function escalateRecommendation(rec: RouteRecommendation): RouteRecommendation | null {
   const nextModel = getNextTierModel(rec.analysis.tier, 'up');
   if (!nextModel) { return null; }
-  const nextThinking = Math.min(rec.thinkingBudget * 2 || 4096, 32000);
+  const nextThinking = rec.thinkingBudget > 0 ? Math.min(rec.thinkingBudget * 2, 32000) : 0;
   return {
     ...rec,
     primaryModel: nextModel,

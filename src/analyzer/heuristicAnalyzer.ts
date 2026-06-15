@@ -85,7 +85,7 @@ export function estimateTokens(text: string): number {
 //  Score → Tier Mapping
 // ─────────────────────────────────────────────
 
-function scoreToTier(score: CognitiveLoadScore): RoutingTier {
+export function scoreToTier(score: CognitiveLoadScore): RoutingTier {
   if (score <= 2) { return 'minimal'; }
   if (score <= 4) { return 'low'; }
   if (score <= 6) { return 'medium'; }
@@ -93,7 +93,7 @@ function scoreToTier(score: CognitiveLoadScore): RoutingTier {
   return 'extreme';
 }
 
-function tierToEffort(tier: RoutingTier): EffortLevel {
+export function tierToEffort(tier: RoutingTier): EffortLevel {
   switch (tier) {
     case 'minimal': return 'none';
     case 'low':     return 'low';
