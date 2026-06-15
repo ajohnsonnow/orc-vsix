@@ -151,7 +151,7 @@ export class OrcStatusBar {
 
   showDetailPanel(context: vscode.ExtensionContext): void {
     if (!this.enabled) {
-      void vscode.window.showInformationMessage('ORC: Status bar is disabled. Enable orca.statusBarEnabled to view session stats.');
+      void vscode.window.showInformationMessage('ORC: Status bar is disabled. Enable orc.statusBarEnabled to view session stats.');
       return;
     }
     const panel = vscode.window.createWebviewPanel(

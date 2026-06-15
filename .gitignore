@@ -8,6 +8,11 @@ node_modules/
 # ── VS Code test runner ────────────────────────────────────────────────────────
 .vscode-test/
 
+# ── Playwright / e2e ─────────────────────────────────────────────────────────────
+test-results/
+playwright-report/
+test/e2e/.artifacts/
+
 # ── VSIX packages ──────────────────────────────────────────────────────────────
 *.vsix
 

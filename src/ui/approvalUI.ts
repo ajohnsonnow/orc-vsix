@@ -25,16 +25,8 @@ import type {
 import { MODEL_REGISTRY } from '../router/promptRouter.js';
 
 // ─────────────────────────────────────────────
-//  Tier Icons & Labels
+//  Tier Labels
 // ─────────────────────────────────────────────
-
-const TIER_ICON: Record<RoutingTier, string> = {
-  minimal: '$(zap)',
-  low:     '$(symbol-method)',
-  medium:  '$(symbol-class)',
-  high:    '$(circuit-board)',
-  extreme: '$(flame)',
-};
 
 const TIER_LABEL: Record<RoutingTier, string> = {
   minimal: 'Minimal',
@@ -59,7 +51,6 @@ export async function showApprovalDialog(
   const { primaryModel, analysis, claudeCodeCommand } = rec;
 
   const tier = analysis.tier;
-  const icon = TIER_ICON[tier];
   const tierLabel = TIER_LABEL[tier];
   const scoreLabel = `${analysis.score}/10`;
   const costLabel = `~$${rec.estimatedCostUSD.toFixed(4)}`;
@@ -70,7 +61,7 @@ export async function showApprovalDialog(
     ? `${rec.thinkingBudget.toLocaleString()} thinking tokens`
     : 'no extended thinking';
 
-  const title = `ORC Router ${icon}  Score ${scoreLabel} — ${tierLabel} Complexity`;
+  const title = `ORC Router — Score ${scoreLabel} — ${tierLabel} Complexity`;
 
   // Build the primary items list
   interface ORCQuickPickItem extends vscode.QuickPickItem {
@@ -137,7 +128,7 @@ export async function showApprovalDialog(
 
   const selected = await vscode.window.showQuickPick(items, {
     title,
-    placeHolder: `Analyzing with ${analysis.analyzerUsed} · ${analysis.confidence * 100 | 0}% confidence`,
+    placeHolder: `Analyzing with ${analysis.analyzerUsed} · ${Math.trunc(analysis.confidence * 100)}% confidence`,
     ignoreFocusOut: true,
     matchOnDescription: true,
     matchOnDetail: true,
@@ -299,18 +290,25 @@ function downgradeRecommendation(rec: RouteRecommendation): RouteRecommendation 
 
 function buildMinimalClaudeConfig(model: ModelSpec, thinkingBudget: number) {
   const thinkingFlag = thinkingBudget > 0 ? `--thinking-budget ${thinkingBudget}` : '';
+
+  let thinking: Record<string, unknown>;
+  if (model.alwaysThinking) {
+    thinking = { type: 'adaptive' };
+  } else if (model.supportsTemperature === false) {
+    thinking = thinkingBudget > 0 ? { type: 'adaptive' } : { type: 'disabled' };
+  } else if (thinkingBudget > 0) {
+    thinking = { type: 'enabled', budget_tokens: thinkingBudget };
+  } else {
+    thinking = { type: 'disabled' };
+  }
+
   return {
     model: model.id,
     thinkingBudget,
     useFastMode: false,
     systemPromptPrefix: 'Return ONLY the requested output. No preamble. No trailing summaries.',
     cliHint: `claude --model ${model.id} ${thinkingFlag}`.trim(),
-    settingsDelta: {
-      model: model.id,
-      thinking: thinkingBudget > 0
-        ? { type: 'enabled', budget_tokens: thinkingBudget }
-        : { type: 'disabled' },
-    },
+    settingsDelta: { model: model.id, thinking },
   };
 }
 
