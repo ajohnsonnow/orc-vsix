@@ -194,7 +194,9 @@
     "untrustedWorkspaces": {
       "supported": "limited",
       "description": "API calls and settings writes are disabled in untrusted workspaces.",
-      "restrictedConfigurations": ["orc.claudeCodeSettingsPath"]
+      "restrictedConfigurations": [
+        "orc.claudeCodeSettingsPath"
+      ]
     }
   },
   "scripts": {
@@ -225,6 +227,7 @@
     "@typescript-eslint/parser": "^7.x",
     "esbuild": "^0.28.1",
     "eslint": "^8.x",
+    "eslint-plugin-sonarjs": "^4.0.3",
     "husky": "^9.0.0",
     "lint-staged": "^15.0.0",
     "markdownlint-cli2": "^0.22.1",
