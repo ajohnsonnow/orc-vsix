@@ -19,6 +19,7 @@ import type { ExecutionResult, RouteRecommendation } from '../types/index.js';
 import { buildCacheAwarePayload, extractCacheStats, validateCacheOrdering } from '../cache/promptCache.js';
 import { runQualityCascade } from '../cascade/selfCorrectionCascade.js';
 import { MODEL_REGISTRY } from '../router/promptRouter.js';
+import { buildHardenedSystemPrompt } from '../security/systemPromptHardening.js';
 
 // ─────────────────────────────────────────────
 //  Extended ExecutionResult (with god mode fields)
@@ -75,9 +76,15 @@ export async function executeRecommendation(
   rec: RouteRecommendation,
   apiKey: string,
   contextText?: string,
+  localEndpoint = 'http://127.0.0.1:1234',
 ): Promise<GodModeExecutionResult> {
   const startMs = Date.now();
   const channel = getOutputChannel();
+
+  // Local (LM Studio) — free, on-machine, no Anthropic key required.
+  if (rec.primaryModel.provider === 'local') {
+    return executeLocal(prompt, rec, contextText, localEndpoint, channel, startMs);
+  }
 
   if (rec.primaryModel.provider !== 'anthropic') {
     return buildErrorResult(rec, 0,
@@ -423,6 +430,165 @@ async function streamAnthropicCall(
 }
 
 // ─────────────────────────────────────────────
+//  Local Execution (LM Studio, OpenAI-compatible)
+// ─────────────────────────────────────────────
+
+async function executeLocal(
+  prompt: string,
+  rec: RouteRecommendation,
+  contextText: string | undefined,
+  endpoint: string,
+  channel: vscode.OutputChannel,
+  startMs: number,
+): Promise<GodModeExecutionResult> {
+  const systemPrompt = buildHardenedSystemPrompt({
+    taskRole: 'code',
+    isSubagent: false,
+    suppressThinkingTrace: true,
+  });
+
+  channel.clear();
+  channel.show(true);
+  channel.appendLine(`# ORC → ${rec.primaryModel.displayName}  ·  local · free`);
+  channel.appendLine(`> Score ${rec.analysis.score}/10 · ${rec.analysis.tier} · LM Studio @ ${endpoint}`);
+  channel.appendLine('');
+
+  return streamLocalCall(prompt, rec, systemPrompt, contextText ?? '', endpoint, channel, startMs);
+}
+
+interface LocalDelta { content?: string; reasoning_content?: string; }
+interface LocalChunk {
+  choices?: Array<{ delta?: LocalDelta }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
+function applyLocalChunk(
+  chunk: LocalChunk,
+  channel: vscode.OutputChannel,
+  state: { fullText: string; inThinking: boolean; inputTokens: number; outputTokens: number },
+): void {
+  const delta = chunk.choices?.[0]?.delta;
+  if (delta?.reasoning_content) {
+    if (!state.inThinking) { channel.appendLine('> *[reasoning...]*'); state.inThinking = true; }
+    channel.append('·');
+  }
+  if (delta?.content) {
+    if (state.inThinking) { channel.appendLine(''); channel.appendLine('---'); state.inThinking = false; }
+    state.fullText += delta.content;
+    channel.append(delta.content);
+  }
+  if (chunk.usage) {
+    state.inputTokens = chunk.usage.prompt_tokens ?? state.inputTokens;
+    state.outputTokens = chunk.usage.completion_tokens ?? state.outputTokens;
+  }
+}
+
+async function streamLocalCall(
+  prompt: string,
+  rec: RouteRecommendation,
+  systemPrompt: string,
+  contextText: string,
+  endpoint: string,
+  channel: vscode.OutputChannel,
+  startMs: number,
+): Promise<GodModeExecutionResult> {
+  const userContent = contextText
+    ? `<context>\n${contextText}\n</context>\n\n${prompt}`
+    : prompt;
+
+  const body = {
+    model: rec.primaryModel.id,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ],
+    temperature: rec.temperature,
+    max_tokens: rec.maxOutputTokens,
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  const state = { fullText: '', inThinking: false, inputTokens: 0, outputTokens: 0 };
+
+  try {
+    const resp = await fetch(`${endpoint.replace(/\/+$/, '')}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!resp.ok || !resp.body) {
+      clearTimeout(timeoutId);
+      const detail = resp.ok ? 'no response body' : `HTTP ${resp.status}`;
+      const msg = `LM Studio request failed (${detail}). Is "${rec.primaryModel.id}" loaded at ${endpoint}?`;
+      channel.appendLine(`\n**Error:** ${msg}`);
+      return buildErrorResult(rec, Date.now() - startMs, msg);
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let streaming = true;
+
+    while (streaming) {
+      const { done, value } = await reader.read();
+      streaming = !done;
+      if (value) { buffer += decoder.decode(value, { stream: true }); }
+
+      let nl = buffer.indexOf('\n');
+      while (nl >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        nl = buffer.indexOf('\n');
+        if (!line.startsWith('data:')) { continue; }
+        const data = line.slice(5).trim();
+        if (data === '' || data === '[DONE]') { continue; }
+        try {
+          applyLocalChunk(JSON.parse(data) as LocalChunk, channel, state);
+        } catch { /* partial/non-JSON keepalive line — skip */ }
+      }
+    }
+
+    clearTimeout(timeoutId);
+    const durationMs = Date.now() - startMs;
+    channel.appendLine('');
+    channel.appendLine('---');
+    channel.appendLine(
+      `*${rec.primaryModel.displayName} · local · in:${state.inputTokens} out:${state.outputTokens} · $0.00000 (free) · ${(durationMs / 1000).toFixed(1)}s*`,
+    );
+
+    return {
+      success: true,
+      content: state.fullText,
+      inputTokens: state.inputTokens,
+      outputTokens: state.outputTokens,
+      thinkingTokens: 0,
+      costUSD: 0,
+      modelUsed: rec.primaryModel.id,
+      durationMs,
+      cacheHit: false,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 0,
+      cacheSavingsUSD: 0,
+      qualityScore: 0,
+      wasEscalated: false,
+      thinkingPreview: '',
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    const msg = isAbort
+      ? `Local request timed out after 120s. "${rec.primaryModel.id}" may be too large or not loaded.`
+      : `Cannot reach LM Studio at ${endpoint}. Start the server and load "${rec.primaryModel.id}". (${err instanceof Error ? err.message : String(err)})`;
+    channel.appendLine(`\n**Error:** ${msg}`);
+    return buildErrorResult(rec, Date.now() - startMs, msg);
+  }
+}
+
+// ─────────────────────────────────────────────
 //  Escalation Model Lookup (derived from MODEL_REGISTRY)
 // ─────────────────────────────────────────────
 
@@ -463,7 +629,7 @@ function getEscalatedModel(currentModelId: string) {
 //  Task Type Detection
 // ─────────────────────────────────────────────
 
-function detectTaskType(prompt: string): 'code' | 'analysis' | 'general' {
+export function detectTaskType(prompt: string): 'code' | 'analysis' | 'general' {
   if (/\b(implement|write|create|fix|refactor|code|function|class|method|bug)\b/i.test(prompt)) {
     return 'code';
   }

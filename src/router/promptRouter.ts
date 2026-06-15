@@ -23,6 +23,7 @@ import type {
   RouteRecommendation,
   RoutingBias,
   RoutingTier,
+  TaskType,
 } from '../types/index.js';
 
 // ─────────────────────────────────────────────
@@ -169,7 +170,76 @@ export const MODEL_REGISTRY: Record<string, ModelSpec> = {
     tier: 'medium',
     strengths: ['cost-efficient reasoning', 'coding', 'STEM', 'scale'],
   },
+  // ── Local (LM Studio, OpenAI-compatible @ localhost:1234) — $0, runs on your machine ──
+  'qwen2.5-coder-32b': {
+    id: 'qwen2.5-coder-32b-instruct',
+    displayName: 'Qwen2.5-Coder 32B (local)',
+    provider: 'local',
+    contextWindow: 32_768,
+    inputCostPerMillion: 0,
+    outputCostPerMillion: 0,
+    supportsThinking: false,
+    maxThinkingBudget: 0,
+    tier: 'high',
+    supportsTemperature: true,
+    strengths: ['code generation', 'refactoring', 'tests', 'bug fixes', 'free local execution'],
+  },
+  'qwen3-32b-local': {
+    id: 'qwen/qwen3-32b',
+    displayName: 'Qwen3 32B (local)',
+    provider: 'local',
+    contextWindow: 32_768,
+    inputCostPerMillion: 0,
+    outputCostPerMillion: 0,
+    supportsThinking: false,
+    maxThinkingBudget: 0,
+    tier: 'medium',
+    supportsTemperature: true,
+    strengths: ['general reasoning', 'local execution', 'fast iteration'],
+  },
+  'deepseek-r1-70b-local': {
+    id: 'deepseek-r1-distill-llama-70b',
+    provider: 'local',
+    displayName: 'DeepSeek-R1 70B (local)',
+    contextWindow: 32_768,
+    inputCostPerMillion: 0,
+    outputCostPerMillion: 0,
+    supportsThinking: false,
+    maxThinkingBudget: 0,
+    tier: 'extreme',
+    supportsTemperature: true,
+    strengths: ['deep reasoning', 'local execution', 'math', 'analysis'],
+  },
 };
+
+/** Default local coder registry key used by hybrid routing for code tasks. */
+export const DEFAULT_LOCAL_CODER_KEY = 'qwen2.5-coder-32b';
+
+/**
+ * Resolves the local coder ModelSpec for hybrid routing. Prefers a registered
+ * local model whose id matches `modelId`; otherwise synthesizes a spec so a
+ * user-configured LM Studio model id still works without a registry entry.
+ */
+export function resolveLocalCoder(modelId?: string): ModelSpec {
+  if (modelId) {
+    const registered = Object.values(MODEL_REGISTRY).find(m => m.provider === 'local' && m.id === modelId);
+    if (registered) { return registered; }
+    return {
+      id: modelId,
+      displayName: `${modelId} (local)`,
+      provider: 'local',
+      contextWindow: 32_768,
+      inputCostPerMillion: 0,
+      outputCostPerMillion: 0,
+      supportsThinking: false,
+      maxThinkingBudget: 0,
+      tier: 'high',
+      supportsTemperature: true,
+      strengths: ['code generation', 'free local execution'],
+    };
+  }
+  return MODEL_REGISTRY[DEFAULT_LOCAL_CODER_KEY];
+}
 
 // ─────────────────────────────────────────────
 //  Tier → Model Selection
@@ -182,7 +252,22 @@ export const MODEL_REGISTRY: Record<string, ModelSpec> = {
 function selectModels(
   tier: RoutingTier,
   bias: RoutingBias,
+  taskType: TaskType = 'general',
+  localCoder?: ModelSpec,
 ): [ModelSpec, ModelSpec | null] {
+  // Hybrid: code tasks run free on a local model; planning/analysis use Claude.
+  if (bias === 'hybrid') {
+    if (taskType === 'code') {
+      const coder = localCoder ?? MODEL_REGISTRY[DEFAULT_LOCAL_CODER_KEY];
+      const claudeFallback = (tier === 'high' || tier === 'extreme')
+        ? MODEL_REGISTRY['claude-opus-4-8']
+        : MODEL_REGISTRY['claude-sonnet-4-6'];
+      return [coder, claudeFallback];
+    }
+    // Non-code → Claude ladder (plan/reason on the paid models).
+    return selectModels(tier, 'claude', taskType, localCoder);
+  }
+
   if (bias === 'claude') {
     // Always use the Claude ladder — optimized for Claude Code in VS Code
     switch (tier) {
@@ -352,8 +437,10 @@ export function buildRecommendation(
   meta: { totalContextTokens: number },
   bias: RoutingBias,
   costWarningThresholdUSD: number,
+  taskType: TaskType = 'general',
+  localCoder?: ModelSpec,
 ): RouteRecommendation {
-  const [primary, fallback] = selectModels(analysis.tier, bias);
+  const [primary, fallback] = selectModels(analysis.tier, bias, taskType, localCoder);
 
   const thinkingBudget = primary.supportsThinking
     ? Math.min(analysis.estimatedThinkingTokens, primary.maxThinkingBudget)

@@ -2,6 +2,17 @@
 
 All notable changes to ORC — Cognitive Prompt Router are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Hybrid routing** (`orc.defaultBias: "hybrid"`): plan/reason on Claude (Opus/Fable), run code tasks **free** on a local model. Task type is auto-detected; if the local server is unreachable ORC falls back to Claude.
+- **Local execution provider**: streams from LM Studio's OpenAI-compatible API (`/v1/chat/completions`) — no Anthropic key required, $0 cost. New local models in the registry (Qwen2.5-Coder-32B, Qwen3-32B, DeepSeek-R1-70B).
+- **Local image generation**: `ORC: Generate Image` command drives a local ComfyUI server. Supports a configurable API-format workflow (`orc.comfyWorkflowPath` + `%ORC_PROMPT%` token) for Flux/HiDream/SD3, with a built-in checkpoint txt2img fallback for SD/SDXL.
+- **Local provider health checks**: ORC pings LM Studio / ComfyUI before routing and surfaces a clear message when a server is down.
+- New settings: `orc.localRoutingEnabled`, `orc.lmStudioEndpoint`, `orc.localCodingModel`, `orc.comfyUIEndpoint`, `orc.comfyWorkflowPath`.
+- **Playwright/Electron e2e suite** driving the real VS Code workbench (status bar, command palette, route → settings write).
+
 ## [0.1.0] — 2026-06-15
 
 ### Added

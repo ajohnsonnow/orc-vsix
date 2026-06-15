@@ -16,13 +16,16 @@ export type EffortLevel = 'none' | 'low' | 'medium' | 'high' | 'max';
 
 export type AnalyzerMode = 'llm' | 'heuristic' | 'auto';
 
-export type RoutingBias = 'claude' | 'balanced' | 'cost';
+export type RoutingBias = 'claude' | 'balanced' | 'cost' | 'hybrid';
+
+/** Coarse task category used by hybrid routing to split plan vs. code. */
+export type TaskType = 'code' | 'analysis' | 'general';
 
 // ─────────────────────────────────────────────
 //  Models
 // ─────────────────────────────────────────────
 
-export type ModelProvider = 'anthropic' | 'openai' | 'google' | 'deepseek';
+export type ModelProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'local';
 
 export interface ModelSpec {
   id: string;
@@ -169,4 +172,14 @@ export interface OrcConfig {
   autoApplyToClaudeCode: boolean;
   statusBarEnabled: boolean;
   claudeCodeSettingsPath: string;
+  /** When true, hybrid bias may route code tasks to a local LM Studio model. */
+  localRoutingEnabled: boolean;
+  /** LM Studio OpenAI-compatible base URL, e.g. http://127.0.0.1:1234 */
+  lmStudioEndpoint: string;
+  /** LM Studio model id used for local code execution (hybrid bias). */
+  localCodingModel: string;
+  /** ComfyUI base URL for image generation, e.g. http://127.0.0.1:8188 */
+  comfyUIEndpoint: string;
+  /** Path to an exported ComfyUI workflow (API format) with a %ORC_PROMPT% token. */
+  comfyWorkflowPath: string;
 }

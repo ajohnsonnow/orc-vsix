@@ -80,6 +80,11 @@
         "command": "orc.exportDiagnostics",
         "title": "ORC: Export Problems Panel to JSON (for preflight)",
         "icon": "$(export)"
+      },
+      {
+        "command": "orc.generateImage",
+        "title": "ORC: Generate Image (local ComfyUI)",
+        "icon": "$(file-media)"
       }
     ],
     "configuration": {
@@ -105,14 +110,16 @@
           "enum": [
             "claude",
             "balanced",
-            "cost"
+            "cost",
+            "hybrid"
           ],
           "default": "claude",
-          "description": "Routing bias. 'claude' heavily prefers Claude models (optimal for Claude Code in VS Code).",
+          "description": "Routing bias. 'claude' prefers Claude models. 'hybrid' plans/reasons on Claude but runs code tasks free on a local LM Studio model.",
           "enumDescriptions": [
             "Strongly prefer Claude models — optimized for Claude Code in VS Code",
             "Consider all providers equally",
-            "Always route to cheapest viable option"
+            "Always route to cheapest viable option",
+            "Plan/analyze on Claude (Opus/Fable); run code tasks free on a local LM Studio model"
           ]
         },
         "orc.showCostWarnings": {
@@ -140,6 +147,34 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute path to your Claude Code settings.json. Must be a .json file inside ~/.claude/. Leave empty to auto-detect."
+        },
+        "orc.localRoutingEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow 'hybrid' bias to route code tasks to a local LM Studio model. If the server is unreachable, ORC falls back to Claude."
+        },
+        "orc.lmStudioEndpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:1234",
+          "scope": "machine",
+          "description": "LM Studio OpenAI-compatible base URL used for local code execution."
+        },
+        "orc.localCodingModel": {
+          "type": "string",
+          "default": "qwen2.5-coder-32b-instruct",
+          "description": "LM Studio model id to use for local code tasks under 'hybrid' bias. Must be loaded/available in LM Studio."
+        },
+        "orc.comfyUIEndpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:8188",
+          "scope": "machine",
+          "description": "ComfyUI base URL for the 'ORC: Generate Image' command."
+        },
+        "orc.comfyWorkflowPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to an exported ComfyUI workflow (Save → API Format) containing the token %ORC_PROMPT% in its prompt field. Required for Flux/HiDream/SD3 setups. Leave empty to use a built-in checkpoint workflow."
         }
       }
     },
@@ -173,6 +208,9 @@
         },
         {
           "command": "orc.exportDiagnostics"
+        },
+        {
+          "command": "orc.generateImage"
         }
       ]
     },

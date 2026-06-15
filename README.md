@@ -16,6 +16,9 @@
 | **Context Compression** | Haiku preprocessing for oversized context (65% savings) |
 | **System prompt hardening** | Anti-extraction directives, filler suppression |
 | **Token odometer** | Real-time status bar: tokens, cost, cache savings |
+| **Hybrid local routing** | Plan/reason on Claude; run code tasks **free** on a local LM Studio model |
+| **Local execution** | Streams from LM Studio's OpenAI-compatible API — no Anthropic key, $0 cost |
+| **Local image generation** | `ORC: Generate Image` drives a local ComfyUI server |
 
 ## Quick Start
 
@@ -42,18 +45,24 @@
 | `ORC: Clear Session Token Count` | Reset odometer |
 | `ORC: Set Anthropic API Key` | Store API key in SecretStorage |
 | `ORC: Open Settings` | Open ORC configuration |
+| `ORC: Generate Image (local ComfyUI)` | Generate an image on a local ComfyUI server |
 
 ## Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `orc.analyzerMode` | `"auto"` | `llm` / `heuristic` / `auto` |
-| `orc.defaultBias` | `"claude"` | `claude` / `balanced` / `cost` |
+| `orc.defaultBias` | `"claude"` | `claude` / `balanced` / `cost` / `hybrid` |
 | `orc.autoApplyToClaudeCode` | `false` | Skip confirm when writing settings.json |
 | `orc.costWarningThresholdUSD` | `0.10` | Warn when estimated cost exceeds this |
 | `orc.showCostWarnings` | `true` | Enable context guard + cost warnings |
 | `orc.statusBarEnabled` | `true` | Show token odometer in status bar |
 | `orc.claudeCodeSettingsPath` | `""` | Override path to `~/.claude/settings.json` |
+| `orc.localRoutingEnabled` | `true` | Let `hybrid` bias route code tasks to a local model |
+| `orc.lmStudioEndpoint` | `"http://127.0.0.1:1234"` | LM Studio OpenAI-compatible base URL |
+| `orc.localCodingModel` | `"qwen2.5-coder-32b-instruct"` | LM Studio model id for local code tasks |
+| `orc.comfyUIEndpoint` | `"http://127.0.0.1:8188"` | ComfyUI base URL for image generation |
+| `orc.comfyWorkflowPath` | `""` | Path to an API-format ComfyUI workflow with a `%ORC_PROMPT%` token |
 
 ## Routing Tiers
 
@@ -64,6 +73,21 @@
 | 5–6 | medium | Claude Sonnet 4.6 | 4,096 |
 | 7–8 | high | Claude Opus 4.8 | 10,000 |
 | 9–10 | extreme | Claude Fable 5 | 32,000–128,000 |
+
+## Local & Hybrid Routing (free coding on your machine)
+
+Set `orc.defaultBias` to `hybrid` to **plan and reason on Claude (Opus/Fable), then run code tasks for free on a local model**. ORC detects whether a prompt is a coding task and, if so, routes it to a local [LM Studio](https://lmstudio.ai) model over its OpenAI-compatible API — no Anthropic key required, $0 per run. Planning/analysis prompts still go to Claude.
+
+1. Install LM Studio, download a coding model (recommended: **Qwen2.5-Coder-32B-Instruct**), and start its local server (Developer → Start Server, default `:1234`).
+2. Set `orc.defaultBias` to `hybrid`. ORC checks the server before each code task; if it's unreachable, it transparently falls back to Claude.
+3. Point `orc.localCodingModel` at the model id you loaded (default `qwen2.5-coder-32b-instruct`).
+
+### Local image generation (ComfyUI)
+
+`ORC: Generate Image` sends a prompt to a local [ComfyUI](https://github.com/comfyanonymous/ComfyUI) server (default `:8188`).
+
+- **Classic checkpoints (SD/SDXL):** works out of the box — ORC discovers a checkpoint and builds a standard txt2img graph.
+- **Flux / HiDream / SD3 (UNET-based):** export your working graph from ComfyUI (**Save → API Format**), put the token `%ORC_PROMPT%` in your positive-prompt text field, and set `orc.comfyWorkflowPath` to that file. ORC injects the prompt, randomizes the seed, and submits it. Output is saved to `.orc-images/` in your workspace.
 
 ## Development
 

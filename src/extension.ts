@@ -27,20 +27,25 @@
  */
 
 import * as vscode from 'vscode';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { analyzeHeuristic } from './analyzer/heuristicAnalyzer.js';
 import { analyzeLLM } from './analyzer/cognitiveAnalyzer.js';
-import { buildRecommendation } from './router/promptRouter.js';
+import { buildRecommendation, resolveLocalCoder } from './router/promptRouter.js';
 import { showApprovalDialog, showPromptInputBox } from './ui/approvalUI.js';
 import { OrcStatusBar } from './ui/statusBar.js';
 import { confirmAndApply, getClaudeSettingsPath } from './settings/claudeSettings.js';
-import { executeRecommendation, disposeOutputChannel } from './executor/modelExecutor.js';
+import { executeRecommendation, disposeOutputChannel, detectTaskType } from './executor/modelExecutor.js';
 import { runContextGuard, showContextGuardDiagnostics, checkPeakHourWindow, analyzeTierFit, MAX_CONTEXT_TOKENS } from './diagnostics/contextGuard.js';
 import { countTokensViaAPI, countTokensHeuristic } from './diagnostics/tokenCounter.js';
 import { compressContext, shouldCompress } from './compression/contextCompressor.js';
 import { buildHardenedSystemPrompt } from './security/systemPromptHardening.js';
 import { exportDiagnosticsCommand } from './diagnostics/exportDiagnostics.js';
+import { checkLMStudio, checkComfyUI } from './local/localProvider.js';
+import { generateImage } from './comfy/comfyClient.js';
 import type {
   AnalyzerMode,
+  ModelSpec,
   OrcConfig,
   PromptMetadata,
   RouteRecommendation,
@@ -100,6 +105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ),
     vscode.commands.registerCommand('orc.setApiKey', () => setApiKeyCommand(context)),
     vscode.commands.registerCommand('orc.exportDiagnostics', () => exportDiagnosticsCommand()),
+    vscode.commands.registerCommand('orc.generateImage', () => generateImageCommand()),
   );
 
   // Peak-hour startup warning
@@ -364,8 +370,29 @@ async function runGodModePipeline(
 
       // ── Step 3: Route Recommendation ─────────────
       // Maps tier + bias to a specific model, thinking budget, cost estimate.
-      const bias: RoutingBias = config.defaultBias;
-      const rec = buildRecommendation(analysis, meta, bias, config.costWarningThresholdUSD);
+      // Hybrid bias runs code tasks free on a local model when LM Studio is up.
+      const taskType = detectTaskType(prompt);
+      let bias: RoutingBias = config.defaultBias;
+      let localCoder: ModelSpec | undefined;
+      if (bias === 'hybrid' && taskType === 'code' && config.localRoutingEnabled) {
+        progress.report({ message: 'Checking local LM Studio...' });
+        const local = await checkLMStudio(config.lmStudioEndpoint);
+        if (local.reachable) {
+          localCoder = resolveLocalCoder(config.localCodingModel);
+          if (!local.models.includes(localCoder.id)) {
+            void vscode.window.showWarningMessage(
+              `ORC: "${localCoder.id}" is not loaded in LM Studio ` +
+              `(available: ${local.models.slice(0, 4).join(', ') || 'none'}). Trying anyway.`,
+            );
+          }
+        } else {
+          bias = 'claude';
+          void vscode.window.showWarningMessage(
+            `ORC: LM Studio unreachable at ${config.lmStudioEndpoint} — routing this code task to Claude instead.`,
+          );
+        }
+      }
+      const rec = buildRecommendation(analysis, meta, bias, config.costWarningThresholdUSD, taskType, localCoder);
       lastRecommendation = rec;
 
       // ── Step 4: Context Guard ─────────────────────
@@ -422,6 +449,20 @@ async function runGodModePipeline(
       // Settings-only: user applied settings without requesting model execution
       if (approval.outcome === 'settings-only') { return; }
 
+      // ── Local execution (LM Studio) — free, on-machine, no Anthropic key ──
+      if (finalRec.primaryModel.provider === 'local') {
+        progress.report({ message: `Running ${finalRec.primaryModel.displayName} locally...` });
+        const localResult = await executeRecommendation(
+          prompt, finalRec, '', effectiveContextText || undefined, config.lmStudioEndpoint,
+        );
+        if (!localResult.success) {
+          void vscode.window.showErrorMessage(`ORC: Local execution failed — ${localResult.error}`);
+          return;
+        }
+        statusBar.recordExecution(localResult);
+        return;
+      }
+
       // ── Step 7b: No API key — delegate to Claude Code ──
       if (!config.anthropicApiKey) {
         // Settings already applied in 7a. Launch Claude Code with the prompt.
@@ -456,9 +497,6 @@ async function runGodModePipeline(
       // strict output format. Injected immediately before execution.
       progress.report({ message: `Running ${finalRec.primaryModel.displayName}...` });
 
-      const taskType = /\b(implement|write|fix|refactor|code)\b/i.test(prompt) ? 'code'
-        : /\b(analyze|review|explain|compare)\b/i.test(prompt) ? 'analysis'
-        : 'general';
       const hardenedPrompt = buildHardenedSystemPrompt({
         taskRole: taskType,
         isSubagent: false,
@@ -549,6 +587,70 @@ async function sendToClaudeCode(prompt: string): Promise<void> {
 }
 
 // ─────────────────────────────────────────────
+//  Command: orc.generateImage (local ComfyUI)
+// ─────────────────────────────────────────────
+
+async function generateImageCommand(): Promise<void> {
+  const config = getOrcConfig();
+  const status = await checkComfyUI(config.comfyUIEndpoint);
+  if (!status.reachable) {
+    void vscode.window.showErrorMessage(
+      `ORC: ComfyUI unreachable at ${config.comfyUIEndpoint}. Start ComfyUI and try again.` +
+      (status.error ? ` (${status.error})` : ''),
+    );
+    return;
+  }
+
+  const prompt = await vscode.window.showInputBox({
+    title: 'ORC: Generate Image (ComfyUI)',
+    placeHolder: 'Describe the image to generate...',
+    ignoreFocusOut: true,
+    validateInput: v => (v.trim().length < 3 ? 'Prompt must be at least 3 characters.' : null),
+  });
+  if (!prompt) { return; }
+
+  // Optional user workflow template (required for Flux/HiDream/SD3 setups).
+  let workflowJson: string | undefined;
+  const wfPath = config.comfyWorkflowPath.trim();
+  if (wfPath) {
+    try {
+      workflowJson = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(wfPath))).toString('utf8');
+    } catch {
+      void vscode.window.showErrorMessage(`ORC: Could not read ComfyUI workflow at ${wfPath}.`);
+      return;
+    }
+  }
+
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: 'ORC: Generating image...', cancellable: false },
+    async (progress) => {
+      try {
+        const img = await generateImage(
+          config.comfyUIEndpoint, prompt, { workflowJson }, msg => progress.report({ message: msg }),
+        );
+        const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+        const dir = wsFolder
+          ? vscode.Uri.joinPath(wsFolder, '.orc-images')
+          : vscode.Uri.file(path.join(os.tmpdir(), 'orc-images'));
+        await vscode.workspace.fs.createDirectory(dir);
+        const fileUri = vscode.Uri.joinPath(dir, `orc-${Date.now()}-${img.filename}`);
+        await vscode.workspace.fs.writeFile(fileUri, img.bytes);
+        const choice = await vscode.window.showInformationMessage(
+          `ORC: Image generated (${img.source}).`, 'Open Image',
+        );
+        if (choice === 'Open Image') {
+          await vscode.commands.executeCommand('vscode.open', fileUri);
+        }
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `ORC: Image generation failed — ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+  );
+}
+
+// ─────────────────────────────────────────────
 //  Config Reader
 // ─────────────────────────────────────────────
 
@@ -564,6 +666,11 @@ function getOrcConfig(): OrcConfig {
     autoApplyToClaudeCode:   cfg.get<boolean>('autoApplyToClaudeCode', false),
     statusBarEnabled:        cfg.get<boolean>('statusBarEnabled', true),
     claudeCodeSettingsPath:  cfg.get<string>('claudeCodeSettingsPath', ''),
+    localRoutingEnabled:     cfg.get<boolean>('localRoutingEnabled', true),
+    lmStudioEndpoint:        cfg.get<string>('lmStudioEndpoint', 'http://127.0.0.1:1234'),
+    localCodingModel:        cfg.get<string>('localCodingModel', 'qwen2.5-coder-32b-instruct'),
+    comfyUIEndpoint:         cfg.get<string>('comfyUIEndpoint', 'http://127.0.0.1:8188'),
+    comfyWorkflowPath:       cfg.get<string>('comfyWorkflowPath', ''),
   };
 }
 

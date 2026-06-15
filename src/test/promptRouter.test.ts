@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildRecommendation, MODEL_REGISTRY } from '../router/promptRouter.js';
+import { buildRecommendation, MODEL_REGISTRY, resolveLocalCoder } from '../router/promptRouter.js';
 import type { CognitiveAnalysis, RoutingTier } from '../types/index.js';
 
 // ─────────────────────────────────────────────
@@ -50,7 +50,7 @@ describe('MODEL_REGISTRY', () => {
   });
 
   it('every model has a valid provider', () => {
-    const validProviders = new Set(['anthropic', 'openai', 'google', 'deepseek']);
+    const validProviders = new Set(['anthropic', 'openai', 'google', 'deepseek', 'local']);
     for (const m of Object.values(MODEL_REGISTRY)) {
       expect(validProviders.has(m.provider)).toBe(true);
     }
@@ -172,5 +172,41 @@ describe('buildRecommendation — claudeCodeCommand', () => {
   it('settingsDelta always contains model key', () => {
     const rec = buildRecommendation(fakeAnalysis('high'), meta, 'claude', 0.10);
     expect(rec.claudeCodeCommand!.settingsDelta['model']).toBeDefined();
+  });
+});
+
+// ─────────────────────────────────────────────
+//  Hybrid routing (local code, Claude plan)
+// ─────────────────────────────────────────────
+
+describe('hybrid bias routing', () => {
+  it('routes code tasks to a free local model', () => {
+    const rec = buildRecommendation(fakeAnalysis('high'), meta, 'hybrid', 0.10, 'code');
+    expect(rec.primaryModel.provider).toBe('local');
+    expect(rec.estimatedCostUSD).toBe(0);
+    expect(rec.claudeCodeCommand).toBeNull();
+  });
+
+  it('uses the configured local coder when provided', () => {
+    const coder = resolveLocalCoder('my-custom-coder-7b');
+    const rec = buildRecommendation(fakeAnalysis('high'), meta, 'hybrid', 0.10, 'code', coder);
+    expect(rec.primaryModel.id).toBe('my-custom-coder-7b');
+    expect(rec.primaryModel.provider).toBe('local');
+  });
+
+  it('falls back to a Claude model for code tasks (fallbackModel)', () => {
+    const rec = buildRecommendation(fakeAnalysis('high'), meta, 'hybrid', 0.10, 'code');
+    expect(rec.fallbackModel?.provider).toBe('anthropic');
+  });
+
+  it('routes non-code (plan/analysis) tasks to Claude', () => {
+    const rec = buildRecommendation(fakeAnalysis('high'), meta, 'hybrid', 0.10, 'analysis');
+    expect(rec.primaryModel.provider).toBe('anthropic');
+    expect(rec.primaryModel.id).toContain('opus');
+  });
+
+  it('defaults a known local coder model id', () => {
+    expect(resolveLocalCoder().id).toBe('qwen2.5-coder-32b-instruct');
+    expect(resolveLocalCoder().provider).toBe('local');
   });
 });
