@@ -18,6 +18,9 @@ export default [
       "coverage/",
       ".vitepress/cache",
       "**/*.d.ts",
+      // Build tooling lives outside the build tsconfig; don't type-lint it.
+      "**/*.config.{js,mjs,cjs,ts,mts,cts}",
+      "scripts/",
     ],
   },
   {
@@ -46,11 +49,23 @@ export default [
       complexity: ["error", 25],
       "sonarjs/cognitive-complexity": ["error", 25],
       "no-console": ["warn", { allow: ["error", "warn"] }],
-      "max-lines-per-function": ["warn", { max: 80, skipBlankLines: true, skipComments: true }],
+      // Raw line count is noise here — the codebase favors cohesive streaming/pipeline
+      // functions; the complexity rules above are the meaningful gate for "too much".
+      "max-lines-per-function": "off",
       // Numbers/booleans interpolate cleanly into template strings — allow them.
-      "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true, allowBoolean: true }],
+      "@typescript-eslint/restrict-template-expressions": [
+        "error",
+        { allowNumber: true, allowBoolean: true },
+      ],
       // Underscore-prefixed args/vars are intentionally unused.
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrors: "none",
+        },
+      ],
       // Seeds/jitter use Math.random; no cryptographic randomness in this extension.
       "sonarjs/pseudo-random": "off",
       // Too aggressive for defensive guards on loosely-typed external/streaming data.
