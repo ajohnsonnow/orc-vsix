@@ -31,3 +31,6 @@ logs/
 # ── OS artifacts ───────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# Local-only human task list — never commit
+human-todo.md
