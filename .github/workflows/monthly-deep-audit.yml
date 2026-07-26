@@ -17,14 +17,14 @@ name: Monthly Deep Audit
 
 on:
   schedule:
-    - cron: '0 8 1 * *' # 1st of each month, 08:00 UTC
+    - cron: "0 8 1 * *" # 1st of each month, 08:00 UTC
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  NODE_VERSION: '22' # CUSTOMIZE
+  NODE_VERSION: "22" # CUSTOMIZE
 
 jobs:
   # ------------------------------------------------------ full-lighthouse-crawl --
@@ -135,14 +135,14 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Trivy license scan (full, report-only)
-        uses: aquasecurity/trivy-action@0.28.0 # pinact
+        uses: aquasecurity/trivy-action@v0.28.0 # pinact
         with:
           scan-type: fs
           scan-ref: .
           scanners: license
           format: json
           output: license-inventory.json
-          exit-code: '0' # inventory, not a gate — release-gates.yml enforces
+          exit-code: "0" # inventory, not a gate — release-gates.yml enforces
 
       - name: Upload license inventory
         uses: actions/upload-artifact@v4 # pinact

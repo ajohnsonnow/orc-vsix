@@ -281,5 +281,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1"
+  },
+  "overrides": {
+    "@emnapi/runtime": "1.10.0"
   }
 }

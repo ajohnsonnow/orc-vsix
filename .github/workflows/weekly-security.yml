@@ -14,14 +14,14 @@ name: Weekly Security Sweep
 
 on:
   schedule:
-    - cron: '0 9 * * 1' # Mondays 09:00 UTC
+    - cron: "0 9 * * 1" # Mondays 09:00 UTC
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  NODE_VERSION: '22' # CUSTOMIZE
+  NODE_VERSION: "22" # CUSTOMIZE
 
 jobs:
   # ------------------------------------------------------ secrets-full-history --
@@ -107,7 +107,7 @@ jobs:
         if: hashFiles('**/*.csproj') != ''
         uses: actions/setup-dotnet@v4 # pinact
         with:
-          dotnet-version: '8.0.x' # CUSTOMIZE
+          dotnet-version: "8.0.x" # CUSTOMIZE
 
       - name: dotnet vulnerable packages
         id: dotnet_audit
@@ -122,7 +122,7 @@ jobs:
       - name: OSV-Scanner full scan
         id: osv
         continue-on-error: true
-        uses: google/osv-scanner-action/osv-scanner-action@v2 # pinact
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.8 # pinact
         with:
           scan-args: |-
             --recursive
